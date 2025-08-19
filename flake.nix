@@ -1,0 +1,53 @@
+{
+  description = "My new nix config";
+
+  inputs = {
+    # Nixpkgs
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+
+    # Home manager
+    home-manager.url = "github:nix-community/home-manager";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
+
+    # emacs-overlay
+    emacs-overlay.url = "github:nix-community/emacs-overlay";
+
+    # nixarr
+    nixarr.url = "github:rasmus-kirk/nixarr";
+  };
+
+  outputs = {
+    self,
+      nixpkgs,
+      home-manager,
+      nixarr,
+      ...
+  } @ inputs: let
+    inherit (self) outputs;
+  in {
+    # NixOS configuration entrypoint
+    nixosConfigurations = let
+      specialArgs = {inherit inputs outputs;};
+    in {
+      patryk-laptop = nixpkgs.lib.nixosSystem {
+        inherit specialArgs;
+        modules = [
+	        ./hosts/patryk-laptop/configuration.nix
+	        home-manager.nixosModules.home-manager {
+	          home-manager.useGlobalPkgs = true;
+	          home-manager.useUserPackages = true;
+	          home-manager.extraSpecialArgs = specialArgs;
+	          home-manager.users.patryk = import ./users/patryk/home.nix;
+          }
+        ];
+      };
+      home-server = nixpkgs.lib.nixosSystem {
+        inherit specialArgs;
+        modules = [
+          ./hosts/home-server/configuration.nix
+          nixarr.nixosModules.default
+        ];
+      };
+    };
+  };
+}

@@ -1,0 +1,32 @@
+{
+  inputs,
+  lib,
+  config,
+  pkgs,
+  ...
+}: {
+  programs.emacs = {
+    enable = true;
+    extraPackages = epkgs: [ epkgs.exwm ];
+  };
+
+  home.file.emacs-init = {
+    source = ./early-init.el; 
+    target = ".config/emacs/early-init.el";
+  };
+
+  home.file.emacs = {
+    source = ./init.el; 
+    target = ".config/emacs/init.el";
+  };
+
+  #services.emacs = {
+  #  enable = true;
+  #  startWithUserSession = "graphical";
+  #  defaultEditor = true;
+  #   extraOptions = [
+  #    "-f"
+  #    "exwm-wm-mode" 
+  #  ];
+  #};
+}

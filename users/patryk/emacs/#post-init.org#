@@ -1,0 +1,1493 @@
+#+title: Emacs and home configuration
+
+* Reasoning
+
+The goal is to colocate configuation of Emacs as well as other user-facing packages on my personal machine
+within this file. Over the last few years I've used the wonderful ~chezmoi~ package to achieve this without facing many issues,
+however for now I've decided to switch to just using Org's ~tangle~ functionality which, while less complex, provides most of
+the features I care about and synchronizes better with my personal workflow.
+
+The basis for the configuration is the excellent [[https://github.com/jamescherti/minimal-emacs.d?tab=readme-ov-file#features][minimal-emacs]] configuration.
+
+* TODO Inspirations
+* Package management
+
+** ~elpaca~
+
+For package management in Emacs I'm using ~elpaca~ as opposed to the built-in ~package.el~, mostly because of its parallel downloads
+feature which significantly sppeds up package installation.
+
+#+begin_src elisp :tangle pre-early-init.el
+  (setq minimal-emacs-package-initialize-and-refresh nil)
+#+end_src
+
+All the package management stuff is put into the seperate ~pre-init.el~ file.
+
+#+begin_src elisp :comments no :tangle pre-init.el
+  ;; -*- lexical-binding: t -*-
+#+end_src
+
+#+begin_src elisp :tangle pre-init.el
+  (defvar elpaca-installer-version 0.9)
+  (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
+  (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
+  (defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+  (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
+                                :ref nil :depth 1 :inherit ignore
+                                :files (:defaults "elpaca-test.el" (:exclude "extensions"))
+                                :build (:not elpaca--activate-package)))
+  (let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
+         (build (expand-file-name "elpaca/" elpaca-builds-directory))
+         (order (cdr elpaca-order))
+         (default-directory repo))
+    (add-to-list 'load-path (if (file-exists-p build) build repo))
+    (unless (file-exists-p repo)
+      (make-directory repo t)
+      (when (< emacs-major-version 28) (require 'subr-x))
+      (condition-case-unless-debug err
+          (if-let* ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
+                    ((zerop (apply #'call-process `("git" nil ,buffer t "clone"
+                                                    ,@(when-let* ((depth (plist-get order :depth)))
+                                                        (list (format "--depth=%d" depth) "--no-single-branch"))
+                                                    ,(plist-get order :repo) ,repo))))
+                    ((zerop (call-process "git" nil buffer t "checkout"
+                                          (or (plist-get order :ref) "--"))))
+                    (emacs (concat invocation-directory invocation-name))
+                    ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
+                                          "--eval" "(byte-recompile-directory \".\" 0 'force)")))
+                    ((require 'elpaca))
+                    ((elpaca-generate-autoloads "elpaca" repo)))
+              (progn (message "%s" (buffer-string)) (kill-buffer buffer))
+            (error "%s" (with-current-buffer buffer (buffer-string))))
+        ((error) (warn "%s" err) (delete-directory repo 'recursive))))
+    (unless (require 'elpaca-autoloads nil t)
+      (require 'elpaca)
+      (elpaca-generate-autoloads "elpaca" repo)
+      (load "./elpaca-autoloads")))
+  (add-hook 'after-init-hook #'elpaca-process-queues)
+  (elpaca `(,@elpaca-order))
+  
+  (elpaca elpaca-use-package
+  	(elpaca-use-package-mode))
+#+end_src
+
+** ~system-packages~
+
+I'll also be using the ~system-packages~ package to ensure that the required system
+packages are installed. I'm adding support for the ~yay~ AUR helper because I'm using Arch but this
+can be easily and safely removed on another system (provided the required packages are still available of course).
+
+#+begin_src elisp :tangle pre-init.el
+  (use-package system-packages
+    :ensure (:wait t)
+    :demand t
+    :config
+    (add-to-list 'system-packages-supported-package-managers
+  	           '(yay .
+  		             ((default-sudo . nil)
+  		              (install . "yay -S")
+                        (search . "yay -Ss")
+  		              (uninstall . "yay -Rs")
+  		              (update . "yay -Syu")
+  		              (log . "cat /var/log/pacman.log")
+  		              (change-log . "yay -Qc")
+  	 	              (clean-cache . "yay -Sc")
+  		              (get-info . "yay -Qi")
+  		              (get-info-remote . "yay -Si")
+  		              (list-files-provided-by . "yay -Ql")
+  		              (owning-file . "yay -Qo")
+  		              (verify-all-dependencies . "yay -Dk")
+  		              (remove-orphaned . "yay -Rsn $(pacman -Qtdq)")
+  		              (list-installed-packages . "yay -Qe")
+  		              (list-installed-packages-all . "yay -Q")
+                        (list-dependencies-of . "yay -Qi")
+  		              (noconfirm . "--noconfirm"))))
+    (setq system-packages-use-sudo nil)
+    (setq system-packages-package-manager 'yay)
+    (setq system-packages-noconfirm t))
+#+end_src
+
+Yes, this package is the only reason I install ~helm~...
+
+#+begin_src elisp :tangle yes
+  (use-package helm-system-packages
+    :ensure (:host github :repo "emacs-helm/helm-system-packages")
+    :ensure-system-package expac
+    :commands (helm-system-packages))
+#+end_src
+
+* Sensible defaults
+
+Most of this section is alread taken care of by ~minimal-emacs~ but there are some more recommended settings.
+
+** Lexical binding
+
+It's faster and (almost) always works, it's also required by some packages like ~consult~.
+
+#+begin_src elisp :comments no :tangle yes
+  ;; -*- lexical-binding: t -*-
+#+end_src
+
+** Automatic compilation
+
+The ~compile-angel~ package automatically byte-compiles and native-compiles Emacs Lisp libraries.
+
+#+begin_src elisp :tangle yes
+  (use-package compile-angel
+    :ensure t
+    :config
+    ;;(setq compile-angel-verbose t)
+    (compile-angel-on-load-mode)
+    (add-hook 'emacs-lisp-mode-hook #'compile-angel-on-save-local-mode))
+#+end_src
+
+** Don't jump around
+
+I hate automatic recentering.
+
+#+begin_src elisp :tangle yes
+  (use-package emacs
+    :ensure nil
+    :custom
+    (scroll-conservatively 101))
+#+end_src
+
+** Disable customizations
+
+~custom~ is notoriously hard to integrate with an existing configuration and can cause many headaches.
+
+#+begin_src elisp :tangle yes
+  (use-package emacs
+    :ensure nil
+    :custom
+    (custom-file null-device))
+#+end_src
+
+** Reduce clutter
+
+Move all files created by Emacs into one directory.
+
+#+begin_src elisp :tangle pre-early-init.el
+  (setq minimal-emacs-var-dir (expand-file-name "var/" minimal-emacs-user-directory))
+  (setq package-user-dir (expand-file-name "elpa" minimal-emacs-var-dir))
+  (setq user-emacs-directory minimal-emacs-var-dir)
+#+end_src
+
+** ~recentf~, ~savehist~, ~saveplace~ and ~auto-revert~
+
+- ~auto-revert~ in Emacs is a feature that automatically updates the
+contents of a buffer to reflect changes made to the underlying file
+on disk.
+
+- ~recentf~ is an Emacs package that maintains a list of recently
+accessed files, making it easier to reopen files you have worked on
+recently.
+
+- ~savehist~ is an Emacs feature that preserves the minibuffer history between
+sessions. It saves the history of inputs in the minibuffer, such as commands,
+search strings, and other prompts, to a file. This allows users to retain
+their minibuffer history across Emacs restarts.
+
+- ~save-place-mode~ enables Emacs to remember the last location within a file
+upon reopening. This feature is particularly beneficial for resuming work at
+the precise point where you previously left off.
+
+#+begin_src elisp :tangle yes
+  (use-package emacs
+    :ensure nil
+    :init
+    (add-hook 'after-init-hook #'global-auto-revert-mode)
+    (add-hook 'after-init-hook #'(lambda()
+                                 (let ((inhibit-message t))
+                                   (recentf-mode 1))))
+    (add-hook 'kill-emacs-hook #'recentf-cleanup)
+    (add-hook 'after-init-hook #'savehist-mode)
+    (add-hook 'after-init-hook #'save-place-mode))
+#+end_src
+
+** Less noise
+
+Make startup cleaner and faster by disabling visual feedback.
+
+#+begin_src elisp :tangle pre-early-init.el
+  (setq minimal-emacs-inhibit-redisplay-during-startup t)
+  (setq minimal-emacs-disable-mode-line-during-startup t)
+#+end_src
+
+Hide warnings and display only errors in the echo area.
+
+#+begin_src elisp :tangle yes
+  (use-package emacs
+   :ensure nil
+   :custom
+   (warning-minimum-level :error))
+#+end_src
+
+* Appearance
+
+** Theme
+
+I use ~doom-one~ from the ~doom-themes~ package but most Emacs themes have excellent support for different modes and modelines.
+
+#+begin_src elisp :tangle yes
+  (use-package doom-themes
+    :ensure t
+    :custom
+    (doom-themes-enable-bold t)
+    (doom-themes-enable-italic t)
+    :config       
+    (load-theme 'doom-one t)
+    (doom-themes-visual-bell-config)
+    (doom-themes-org-config))
+#+end_src
+
+** Fonts
+
+This configuration uses a proportional font as the default. Why do we have to pretend we're living in a terminal like some sort of /barbarians/?
+
+#+begin_src elisp :tangle yes
+  (use-package emacs
+    :ensure nil
+    :ensure-system-package (("/usr/share/fonts/OTF/ETbb-Regular.otf" . otf-etbb)
+                            ("/usr/share/fonts/TTF/FiraCode-Regular.ttf" . ttf-fira-code)
+                            ("/usr/share/fonts/TTF/IosevkaAile-Regular.ttc" . ttc-iosevka-aile))
+    :init
+    (defun my/configure-font ()
+      (set-face-attribute 'default nil :font "Iosevka Aile" :height 120)
+      (set-face-attribute 'variable-pitch nil :font "ETbb" :height 145)
+      (set-face-attribute 'fixed-pitch nil :font "Fira Code" :height 120)
+      (set-face-attribute 'tooltip nil :inherit 'fixed-pitch))
+    (add-hook 'server-after-make-frame-hook #'my/configure-font))
+#+end_src
+
+#+begin_src  elisp :tangle yes
+  (use-package fixed-pitch
+    :ensure (:host github :repo "cstby/fixed-pitch-mode")
+    :demand t
+    :custom
+    (fixed-pitch-whitelist-hooks
+     '(eshell-mode-hook
+       eshell-load-hook))
+    (fixed-pitch-dont-change-cursor t))
+#+end_src
+
+I also use ~polymode~ to have a ~mixed-pitch~-like experience, particularly in Org buffers.
+
+#+begin_src elisp :tangle yes
+  (use-package polymode
+    :after org
+    :ensure t
+    :config
+    (add-hook 'polymode-init-inner-hook
+              (lambda ()
+              (let* ((fix-pitch (face-attribute 'fixed-pitch :family))
+                     (fix-font (face-attribute 'fixed-pitch :font))
+                     (fix-height (face-attribute 'fixed-pitch :height))
+                     (bg (face-attribute 'org-block-begin-line :background))
+                     (props `(:background ,bg
+                              :extend t
+                              :height ,fix-height
+                              :family ,fix-pitch
+                              :font ,fix-font)))
+                (oset pm/chunkmode adjust-face props)))))
+#+end_src
+
+** Window
+
+*** Outer gaps
+
+I use my own fork since ~lucasgruss~'s version seems to be unmaintained and broken right now.
+
+#+begin_src elisp :tangle yes
+  (use-package exwm-outer-gaps
+    :after exwm
+    :ensure (:host github :repo "PatrykGor/exwm-outer-gaps")
+    :config
+    (exwm-outer-gaps-mode)
+    (exwm-outer-gaps-set-all 40 nil))
+#+end_src
+
+*** ~posframe~
+
+Making ~vertico~ use ~posframe~ makes ~EXWM~ look like a real window manager. I love this package, even though
+it needs fixes to work with ~EXWM~, ironically. I modify the default refposhandler to account for the outer gaps. Not the most elegant solution
+but it works.
+
+#+begin_src elisp :tangle yes
+  (use-package vertico-posframe
+    :ensure t
+    :ensure-system-package (xwininfo . xorg-xwininfo)
+    :after vertico
+    :custom
+    (vertico-posframe-poshandler #'posframe-poshandler-frame-top-center)
+    (vertico-posframe-parameters
+          '((internal-border-width . 0)
+            (left-fringe . 8)
+            (right-fringe . 8)))
+    :init
+    (defun vertico-posframe-refposhandler-status (&optional frame)
+        "Parent FRAME poshander function.
+    Get the position of parent frame (current frame) with the help of
+    xwininfo."
+        (when (executable-find "xwininfo")
+          (with-temp-buffer
+            (let ((case-fold-search nil))
+              (call-process "xwininfo" nil t nil
+                            "-display" (frame-parameter frame 'display)
+                            "-id"  (frame-parameter frame 'window-id))
+              (goto-char (point-min))
+              (search-forward "Absolute upper-left")
+              (let ((x (string-to-number
+                        (buffer-substring-no-properties
+                         (search-forward "X: ")
+                         (line-end-position))))
+                    (y (- (string-to-number
+                           (buffer-substring-no-properties
+                            (search-forward "Y: ")
+                            (line-end-position))) (aref exwm-outer-gaps-width 2))))
+                (cons x y))))))
+      (setq vertico-posframe-refposhandler #'vertico-posframe-refposhandler-status)
+      :config
+      (vertico-posframe-mode 1))
+#+end_src
+
+** Wallpaper
+
+#+begin_src elisp :tangle yes
+  (use-package wallpaper
+    :ensure nil
+    :demand t
+    :after exwm
+    :ensure-system-package feh
+    :config
+    (setq wallpaper-command "feh")
+    (setq wallpaper-command-args '("--bg-fill" "%f"))
+    (defun my/set-wallpaper ()
+      (wallpaper-set "~/Pictures/wallpapers/wallpaper.png"))
+    (add-hook 'exwm-randr-screen-change-hook #'my/set-wallpaper)
+    (my/set-wallpaper))
+#+end_src
+
+** Frame Geometry
+
+I want the frames to have a bit of breathing room.
+
+#+begin_src elisp :tangle yes
+  (use-package emacs
+    :ensure nil
+    :init
+    (defun my/configure-frame-geometry ()
+      (modify-all-frames-parameters '((internal-border-width  . 20))))
+    (add-hook 'server-after-make-frame-hook #'my/configure-frame-geometry))
+#+end_src
+
+** Modeline
+
+#+begin_src elisp :tangle yes
+  (use-package doom-modeline
+    :ensure t
+    :custom
+    (doom-modeline-percent-position nil)
+    (doom-modeline-icon t)
+    (doom-modeline-buffer-encoding nil)
+    (doom-modeline-height 25)
+    :config
+    (doom-modeline-mode 1))
+#+end_src
+
+* Navigation
+
+** ~app-launcher~
+
+A small package that uses the ~completing-read~ interface to display and launch ~.desktop~ entries.
+
+#+begin_src elisp :tangle yes
+  (use-package app-launcher
+    :ensure (:host github :repo "SebastienWae/app-launcher")
+    :commands (app-launcher-run-app))
+#+end_src
+
+** ~completing-read~ interface
+*** ~consult~
+
+A navigation package that needs no introduction. I setup the recommended configuration and some additions from the wiki.
+The reason we ~:demand~ this package is because other packages like ~qutebrowser.el~ tend to hook into it in unexpected ways.
+
+#+begin_src elisp :tangle yes
+  (use-package consult
+    :ensure t
+    :demand t
+    :bind (;; C-c bindings in `mode-specific-map'
+           ("C-c M-x" . consult-mode-command)
+           ("C-c h" . consult-history)
+           ("C-c k" . consult-kmacro)
+           ("C-c m" . consult-man)
+           ("C-c i" . consult-info)
+           ([remap Info-search] . consult-info)
+           ;; C-x bindings in `ctl-x-map'
+           ("C-x M-:" . consult-complex-command)     ;; orig. repeat-complex-command
+           ("C-x b" . consult-buffer)                ;; orig. switch-to-buffer
+           ("C-x 4 b" . consult-buffer-other-window) ;; orig. switch-to-buffer-other-window
+           ("C-x 5 b" . consult-buffer-other-frame)  ;; orig. switch-to-buffer-other-frame
+           ("C-x t b" . consult-buffer-other-tab)    ;; orig. switch-to-buffer-other-tab
+           ("C-x r b" . consult-bookmark)            ;; orig. bookmark-jump
+           ("C-x p b" . consult-project-buffer)      ;; orig. project-switch-to-buffer
+           ;; Custom M-# bindings for fast register access
+           ("M-#" . consult-register-load)
+           ("M-'" . consult-register-store)          ;; orig. abbrev-prefix-mark (unrelated)
+           ("C-M-#" . consult-register)
+           ;; Other custom bindings
+           ("M-y" . consult-yank-pop)                ;; orig. yank-pop
+           ;; M-g bindings in `goto-map'
+           ("M-g e" . consult-compile-error)
+           ("M-g f" . consult-flymake)               ;; Alternative: consult-flycheck
+           ("M-g g" . consult-goto-line)             ;; orig. goto-line
+           ("M-g M-g" . consult-goto-line)           ;; orig. goto-line
+           ("M-g o" . consult-outline)               ;; Alternative: consult-org-heading
+           ("M-g m" . consult-mark)
+           ("M-g k" . consult-global-mark)
+           ("M-g i" . consult-imenu)
+           ("M-g I" . consult-imenu-multi)
+           ;; M-s bindings in `search-map'
+           ("M-s d" . consult-find)                  ;; Alternative: consult-fd
+           ("M-s c" . consult-locate)
+           ("M-s g" . consult-grep)
+           ("M-s G" . consult-git-grep)
+           ("M-s r" . consult-ripgrep)
+           ("M-s l" . consult-line)
+           ("M-s L" . consult-line-multi)
+           ("M-s k" . consult-keep-lines)
+           ("M-s u" . consult-focus-lines)
+           ;; Isearch integration
+           ("M-s e" . consult-isearch-history)
+           :map isearch-mode-map
+           ("M-e" . consult-isearch-history)         ;; orig. isearch-edit-string
+           ("M-s e" . consult-isearch-history)       ;; orig. isearch-edit-string
+           ("M-s l" . consult-line)                  ;; needed by consult-line to detect isearch
+           ("M-s L" . consult-line-multi)            ;; needed by consult-line to detect isearch
+           ;; Minibuffer history
+           :map minibuffer-local-map
+           ("M-s" . consult-history)                 ;; orig. next-matching-history-element
+           ("M-r" . consult-history))                ;; orig. previous-matching-history-element
+
+    :hook (completion-list-mode . consult-preview-at-point-mode)
+    :init
+    (advice-add #'register-preview :override #'consult-register-window)
+    (setq register-preview-delay 0.5)
+    (setq xref-show-xrefs-function #'consult-xref
+          xref-show-definitions-function #'consult-xref)
+    (setq read-file-name-function #'consult-find-file-with-preview)
+
+    (defun consult-find-file-with-preview (prompt &optional dir default mustmatch initial pred)
+      (interactive)
+      (let ((default-directory (or dir default-directory))
+            (minibuffer-completing-file-name t))
+        (consult--read #'read-file-name-internal :state (consult--file-preview)
+                       :prompt prompt
+                       :initial initial
+                       :require-match mustmatch
+                       :predicate pred)))
+    :config
+    (setq consult-preview-excluded-buffers '(major-mode . exwm-mode))
+    (consult-customize
+     consult-theme :preview-key '(:debounce 0.2 any)
+     consult-ripgrep consult-git-grep consult-grep consult-man
+     consult-bookmark consult-recent-file consult-xref
+     consult--source-bookmark consult--source-file-register
+     consult--source-recent-file consult--source-project-recent-file
+     :preview-key '(:debounce 0.4 any))
+    (setq consult-narrow-key "<"))
+#+end_src
+
+*** ~vertico~
+
+The best ~completing-read~ ui available.
+
+#+begin_src elisp :tangle yes
+  (use-package vertico
+    :ensure t
+    :config
+    (vertico-mode))
+#+end_src
+
+*** Annotations
+
+The ~marginalia~ package takes care of annotations in an almost magical way.
+
+#+begin_src elisp :tangle yes
+  (use-package marginalia
+    :ensure t
+    :bind (:map minibuffer-local-map
+                ("M-A" . marginalia-cycle))
+    :demand t
+    :config
+    (marginalia-mode))
+#+end_src
+
+Another package sets up the icons.
+
+#+begin_src elisp :tangle yes
+  (use-package nerd-icons-completion
+    :after marginalia
+    :ensure t
+    :config
+    (nerd-icons-completion-mode)
+    (add-hook 'marginalia-mode-hook #'nerd-icons-completion-marginalia-setup))
+#+end_src
+
+*** Completion style
+
+~orderless~ is, in my opinion, the best OOTB completion style for Emacs. I add a completion style that only enables it for short inputs, to not get in
+the way when performance is critical (~corfu~).
+
+#+begin_src elisp :tangle yes
+  (use-package orderless
+    :ensure t
+    :custom
+    (completion-styles '(orderless basic))
+    (completion-category-defaults nil)
+    (completion-category-overrides '((file (styles partial-completion))))
+    :config
+    (defun orderless-fast-dispatch (word index total)
+      (and (= index 0) (= total 1) (length< word 4)
+           (cons 'orderless-literal-prefix word)))
+    (orderless-define-completion-style orderless-fast
+      (orderless-style-dispatchers '(orderless-fast-dispatch))
+      (orderless-matching-styles '(orderless-literal orderless-regexp))))
+#+end_src
+
+** ~Embark~
+The commands are bound in the ~meow~ configuration section below
+
+#+begin_src elisp :tangle yes
+  (use-package embark
+  :ensure t
+  :commands
+  (embark-act
+   embark-dwim      
+   embark-bindings) ;; alternative for `describe-bindings'
+  :init
+  ;; Optionally replace the key help with a completing-read interface
+  (setq prefix-help-command #'embark-prefix-help-command)
+  (add-hook 'eldoc-documentation-functions #'embark-eldoc-first-target)
+  (setq eldoc-documentation-strategy #'eldoc-documentation-compose-eagerly)
+
+  :config
+  (add-to-list 'display-buffer-alist
+               '("\\`\\*Embark Collect \\(Live\\|Completions\\)\\*"
+                 nil
+                 (window-parameters (mode-line-format . none)))))
+  
+;; Consult users will also want the embark-consult package.
+(use-package embark-consult
+  :ensure t ; only need to install it, embark loads it after consult if found
+  :hook
+  (embark-collect-mode . consult-preview-at-point-mode))
+#+end_src
+** ~consult-omni~
+I believe this package deserves its own section because of how much personalized configuration it requires.
+
+#+begin_src elisp :tangle yes
+  (use-package consult-omni
+  :ensure (:host github :repo "armindarvish/consult-omni" :branch "main" :files (:defaults "sources/*.el"))
+  :after (consult bitwarden)
+  :custom
+
+  ;;; General settings that apply to all sources
+
+  (consult-omni-show-preview t) ;;; show previews
+  (consult-omni-preview-key "C-o") ;;; set the preview key to C-o
+  (consult-omni-highlight-matches-in-minibuffer t) ;;; highlight matches in minibuffer
+  (consult-omni-highlight-matches-in-file t) ;;; highlight matches in files
+  (consult-omni-default-count 5) ;;; set default count
+  (consult-omni-default-page 0) ;;; set the default page (default is 0 for the first page)
+
+  ;; optionally change the consult-omni debounce, throttle and delay.
+  ;; Adjust these (e.g. increase to avoid hiting a source (e.g. an API) too frequently)
+  (consult-omni-dynamic-input-debounce 0.8)
+  (consult-omni-dynamic-input-throttle 1.6)
+  (consult-omni-dynamic-refresh-delay 0.8)
+
+  ;; Optionally set backend for http request (either 'url, 'request, or 'plz)
+  ;; (consult-omni-http-retrieve-backend 'plz)
+  :config
+
+  ;;; Load Sources Core code
+  (require 'consult-omni-sources)
+
+  ;;; Load Embark Actions
+  (require 'consult-omni-embark)
+
+  ; (setq consult-omni-sources-modules-to-load (list 'consult-omni-wkipedia 'consult-omni-notes))
+  (consult-omni-sources-load-modules)
+
+  ;; set multiple sources for consult-omni-multi command. Change these lists as needed for different interactive commands. Keep in mind that each source has to be a key in `consult-omni-sources-alist'.
+  (setq consult-omni-multi-sources '("calc"
+                                     ;; "File"
+                                     ;; "Buffer"
+                                     ;; "Bookmark"
+                                     "Apps"
+                                     ;; "gptel"
+                                     "Brave"
+                                     "Dictionary"
+                                     ;; "Google"
+                                     "Wikipedia"
+                                     "elfeed"
+                                     ;; "mu4e"
+                                     ;; "buffers text search"
+                                     "Notes Search"
+                                     "Org Agenda"
+                                     "GitHub"
+                                     ;; "YouTube"
+                                     "Invidious"))
+
+  ;;; Per source customization
+
+  ;; Set API KEYs. It is recommended to use a function that returns the string for better security.
+  (setq consult-omni-google-customsearch-key "YOUR-GOOGLE-API-KEY-OR-FUNCTION")
+  (setq consult-omni-google-customsearch-cx "YOUR-GOOGLE-CX-NUMBER-OR-FUNCTION")
+  (setq consult-omni-brave-api-key "YOUR-BRAVE-API-KEY-OR-FUNCTION")
+  (setq consult-omni-stackexchange-api-key "YOUR-STACKEXCHANGE-API-KEY-OR-FUNCTION")
+  (setq consult-omni-pubmed-api-key "YOUR-PUBMED-API-KEY-OR-FUNCTION")
+  (setq consult-omni-openai-api-key "YOUR-OPENAI-API-KEY-OR-FUNCTION")
+  ;; add more keys as needed here.
+
+  ;; gptel settings
+  (setq consult-omni-gptel-cand-title #'consult-omni--gptel-make-title-short-answer)
+
+  ;; default terminal
+  (setq consult-omni-embark-default-term #'vterm)
+
+  ;; default video player
+  (setq consult-omni-embark-video-default-player  #'mpv-play-url)
+
+  ;; pretty prompt for launcher
+  (setq consult-omni-open-with-prompt "  ")
+
+  ;;; Pick your favorite autosuggest command.
+  (setq consult-omni-default-autosuggest-command #'consult-omni-dynamic-brave-autosuggest) ;;or any other autosuggest source you define
+
+  ;;; Set your shorthand favorite interactive command
+  (setq consult-omni-default-interactive-command #'consult-omni-multi)
+
+  ;;; Optionally Set back-end for notes search to ripgrep-all (requires ripgrep-all)
+  ;; (setq consult-omni-notes-backend-command "rga")
+
+  ;;; Optionally add more interactive commands
+
+  ;; consult-omni-web
+  (defvar consult-omni-web-sources (list "gptel"
+                                         "Brave"
+                                         "elfeed"
+                                         "mu4e"
+                                         "Wikipedia"
+                                         "GitHub"
+                                         "Invidious"
+                                         ))
+  (defun consult-omni-web (&optional initial prompt sources no-callback &rest args)
+    "Interactive web search”
+
+This is similar to `consult-omni-multi', but runs the search on
+web sources defined in `consult-omni-web-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "consult-omni-web" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-web-sources)))
+      (consult-omni-multi initial prompt sources no-callback args)))
+
+  ;; consult-omni-local
+  (defvar consult-omni-local-sources (list "ripgrep"
+                                           "mdfind"
+                                           "Notes Search"
+                                           "Apps"
+                                           "Org Agenda"))
+  (defun consult-omni-local (&optional initial prompt sources no-callback &rest args)
+    "Interactive local search”
+
+This is similar to `consult-omni-multi', but runs the search on
+local sources defined in `consult-omni-local-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "consult-omni-local" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-local-sources)))
+      (consult-omni-multi initial prompt sources no-callback args)))
+
+  ;; consult-omni-scholar
+  (setq consult-omni-scholar-sources (list "PubMed" "Scopus" "Notes Search" "gptel"))
+
+  (defun consult-omni-scholar (&optional initial prompt sources no-callback &rest args)
+    "Interactive “multi-source acadmic literature” search
+
+This is similar to `consult-omni-multi', but runs the search on
+academic literature sources defined in `consult-omni-scholar-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "consult-omni-multi" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-scholar-sources)))
+      (consult-omni-multi initial prompt sources no-callback args)))
+
+  ;; AutoSuggest at point
+  (defun consult-omni-autosuggest-at-point ()
+  (interactive)
+  (let ((input (or (thing-at-point 'url) (thing-at-point 'filename) (thing-at-point 'symbol) (thing-at-point 'sexp) (thing-at-point 'word))))
+    (when (and (minibuffer-window-active-p (selected-window))
+               (equal (substring input 0 1) (consult--async-split-initial nil)))
+      (setq input (substring input 1)))
+    (consult-omni-brave-autosuggest input))))
+ #+end_src
+* Desktop
+
+** User scripts
+
+Add user scripts to ~PATH~.
+
+#+begin_src bash :tangle ~/.bash_profile :shebang "#!/bin/bash"
+  PATH=~/.local/bin:$PATH
+#+end_src
+
+** Global theme
+
+I use ~pywal~ combined with the ~theme-magic~ package to make the entire system use the Emacs theme.
+
+#+begin_src elisp :tangle yes
+  ;; (use-package theme-magic
+  ;;   :ensure t
+  ;;   :after doom-themes
+  ;;   :ensure-system-package (wal . python-pywal)
+  ;;   :config
+  ;;   (theme-magic-export-theme-mode))
+#+end_src
+
+This needs to be called at least once.
+
+#+begin_src sh
+  # wal -i "~/Pictures/wallpapers/"
+#+end_src
+
+Restore on every startup.
+
+#+begin_src sh :tangle ~/.xinitrc :tangle-mode "+x"
+  # wal -R
+#+end_src
+
+
+** TODO Status bar
+
+** ~EXWM~
+
+~EXWM~ has many advantages over other popular options like ~StumpWM~, but it also has significant drawbacks. The single-threaded
+nature of Emacs makes it especially difficult to use as a stable, full blown desktop environment (a problem which is adressed in
+later sections of this file), and it's hard to integrate with external tools that expect a more "traditional" window manager.
+
+However, a fully integrated environment that ~EXWM~ promises is coming very close to "the dream" of most Emacs users (myself included),
+and so far I've not run into large enough issues to completely abandon that dream.
+
+I setup some basic keybinds, rename buffers according to window titles and prepare for ~meow~ integration.
+
+#+begin_src elisp :tangle yes
+  (use-package exwm
+    :ensure t
+    :init
+    (setq exwm-workspace-number 3)
+    (setq exwm-manage-configurations '((t char-mode t)))
+    (setq exwm-input-global-keys
+  	`(([?\s-r] . exwm-reset)
+  	  ([?\s-1] . (lambda () (interactive) (exwm-workspace-switch 0)))
+  	  ([?\s-2] . (lambda () (interactive) (exwm-workspace-switch 1)))
+  	  ([?\s-3] . (lambda () (interactive) (exwm-workspace-switch 2)))
+  	  (, (kbd "s-SPC") . meow-keypad)
+  	  ([?\s-e] . app-launcher-run-app)))
+    (setq exwm-layout-show-all-buffers t)
+    (setq exwm-workspace-show-all-buffers t)
+
+    (defun exwm-rename-buffer ()
+      (interactive)
+      (exwm-workspace-rename-buffer
+       (concat exwm-class-name ":"
+  	     (if (<= (length exwm-title) 50) exwm-title
+  	       (concat (substring exwm-title 0 49) "...")))))
+    
+    (add-hook 'exwm-update-class-hook 'exwm-rename-buffer)
+    (add-hook 'exwm-update-title-hook 'exwm-rename-buffer)
+    :config
+    (exwm-enable))
+#+end_src
+
+Finally we ensure, that we boot into Xorg and Emacs
+
+#+begin_src sh :tangle ~/.xinitrc :tangle-mode "+x"
+  exec emacsclient -a "" -c
+#+end_src
+
+#+begin_src sh :tangle ~/.bash_profile
+  if [ -z "$DISPLAY" ] && [ "$XDG_VTNR" = 1 ]; then
+  	xinit -- vt01
+  fi
+#+end_src
+
+*** Multiple monitors
+
+I'll be using ~EXWM~ workspaces exclusively to manage physical monitors, and will defer the standard "virtual desktop" functionality to
+the built-in ~tab-bar-mode~ because tabs, unlike workspaces, CAN be shared between displays (more on that in later sections).
+
+#+begin_src elisp :tangle yes
+  (use-package exwm-randr
+    :after exwm
+    :ensure nil
+    :ensure-system-package autorandr
+    :config
+    (setq mouse-autoselect-window t
+  	focus-follows-mouse t)
+    (setq exwm-workspace-warp-cursor t)
+    (defun update-displays-hook ()
+      (call-process "autorandr" nil nil nil "--change" "--force")
+      (setq exwm-randr-workspace-monitor-plist
+  	  (pcase (string-trim (shell-command-to-string "autorandr --current"))
+  	    ("docked" '(1 "DP2-1" 2 "DP2-3" 0 "eDP1"))
+  	    ("mobile" '(0 "eDP1"))))
+      (exwm-randr-refresh))
+    (add-hook 'exwm-randr-screen-change-hook #'update-displays-hook)
+    (exwm-randr-mode 1))
+#+end_src
+
+And below the ~autorandr~ configuration, so there's no need to set it up manually.
+
+**** Docked
+
+#+begin_src conf :tangle ~/.config/autorandr/docked/config :mkdirp yes
+  output DP1
+  off
+  output HDMI-1
+  off
+  output DP2
+  off
+  output HDMI-2
+  off
+  output DP2-2
+  off
+  output DP2-3
+  crtc 2
+  mode 1920x1080
+  pos 4480x0
+  rate 60.00
+  rotate left
+  x-prop-audio auto
+  x-prop-broadcast_rgb Automatic
+  x-prop-max_bpc 12
+  x-prop-non_desktop 0
+  output DP2-1
+  crtc 0
+  mode 2560x1440
+  pos 1920x266
+  primary
+  rate 59.95
+  x-prop-audio auto
+  x-prop-broadcast_rgb Automatic
+  x-prop-max_bpc 12
+  x-prop-non_desktop 0
+  output eDP1
+  crtc 1
+  mode 1920x1080
+  pos 0x1113
+  rate 60.03
+  x-prop-broadcast_rgb Automatic
+  x-prop-colorspace Default
+  x-prop-max_bpc 12
+  x-prop-non_desktop 0
+  x-prop-scaling_mode Full aspect
+#+end_src
+
+#+begin_src conf :tangle ~/.config/autorandr/docked/setup :mkdirp yes
+  DP2-1 00ffffffffffff0005e310245d0200000b1c010380351e782ae161a45753a0270d5054bfef00d1c081803168317c4568457c6168617c565e00a0a0a02950302035000f282100001ea073006aa0a02950082035000f282100001a000000fd001e921ea01e000a202020202020000000fc0041473234315147340a202020200177020327f14b101f051404130312021101230907078301000065030c001000681a000001011e4ce6866f80a070384040302035000f282100001efe5b80a070383540302035000f282100001eab22a0a050841a30302036000f282100001af03c00d051a0355060883a000f282100001c0000000000000000000000000000000006
+  DP2-3 00ffffffffffff0010ac60a04c544d300f150104a5331d783eee95a3544c99260f5054a54b00714f8180d1c001010101010101010101023a801871382d40582c4500fd1e1100001e000000ff004856385850313439304d544c0a000000fc0044454c4c205532333131480a20000000fd00384c1e5311000a20202020202000fe
+  eDP1 00ffffffffffff0006af3d2400000000001b0104951f117802766591575992291f505400000001010101010101010101010101010101843a8034713828403064310035ad100000180000000f0000000000000000000000000020000000fe0041554f0a202020202020202020000000fe004231343048414e30322e34200a00bf
+#+end_src
+
+**** Mobile
+
+#+begin_src conf :tangle ~/.config/autorandr/mobile/config :mkdirp yes  
+  output DP1
+  off
+  output HDMI-1
+  off
+  output DP2
+  off
+  output HDMI-2
+  off
+  output eDP1
+  crtc 0
+  mode 1920x1080
+  pos 0x0
+  primary
+  rate 60.03
+  x-prop-broadcast_rgb Automatic
+  x-prop-colorspace Default
+  x-prop-max_bpc 12
+  x-prop-non_desktop 0
+  x-prop-scaling_mode Full aspect
+#+end_src
+
+#+begin_src conf :tangle ~/.config/autorandr/mobile/setup :mkdirp yes
+  eDP1 00ffffffffffff0006af3d2400000000001b0104951f117802766591575992291f505400000001010101010101010101010101010101843a8034713828403064310035ad100000180000000f0000000000000000000000000020000000fe0041554f0a202020202020202020000000fe004231343048414e30322e34200a00bf
+#+end_src
+** Web browser
+
+~qutebrowser~ is a very configurable, well performing browser and possibly the single "largest" program I'll be installing on this system.
+
+The Emacs package by ~lrustand~ allows for even greater integration.
+
+#+begin_src elisp :tangle yes
+  (use-package qutebrowser
+    :after exwm
+    :ensure (:host github :repo "lrustand/qutebrowser.el" :files (:defaults "*.py"))
+    :ensure-system-package (("/usr/lib/python3.13/site-packages/adblock/__init__.py" . python-adblock)
+                            qutebrowser)
+    :init
+    (delete-file "/tmp/emacs-rpc")
+    (setq qutebrowser-launcher-backend #'qutebrowser-consult-launcher)
+    (setq browse-url-browser-function 'browse-url-generic)
+    (setq browse-url-generic-program "qutebrowser")
+    :config
+    (qutebrowser-rpc-ensure-installed)
+    (qutebrowser-theme-export-mode)
+    (global-qutebrowser-exwm-mode))
+#+end_src
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py :mkdirp yes
+  config.load_autoconfig()
+#+end_src
+
+To use ~qutebrowser.el~'s URL launcher we need a small user wrapper for ~emacsclient~.
+
+#+begin_src bash :tangle ~/.local/share/qutebrowser/userscripts/emacsclient-wrapper :shebang "#!/usr/bin/env bash" :mkdirp yes
+  emacsclient -e \
+  "(let ((qutebrowser-fifo \"$QUTE_FIFO\")
+         (qutebrowser-command-backend 'qutebrowser-fifo-send))
+     (condition-case nil
+         $@
+       (t \"\")))" ; true
+#+end_src
+
+Use the URL launcher.
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py
+  config.bind("o", "spawn --userscript emacsclient-wrapper '(qutebrowser-launcher)'")
+  config.bind("O", "spawn --userscript emacsclient-wrapper '(qutebrowser-launcher-tab)'") 
+  config.bind("wo", "spawn --userscript emacsclient-wrapper '(qutebrowser-launcher-window)'")
+  config.bind("W", "spawn --userscript emacsclient-wrapper '(qutebrowser-launcher-private)'")
+  config.bind("go", "spawn --userscript emacsclient-wrapper '(qutebrowser-launcher \"{url:pretty}\")'")
+  config.bind("gO", "spawn --userscript emacsclient-wrapper '(qutebrowser-launcher-tab \"{url:pretty}\")'")
+#+end_src
+
+And the Emacs Password store.
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py
+  config.bind(',p', "spawn --userscript emacsclient-wrapper '(qutebrowser-pass \"{url}\")'")
+  config.bind(',P', "spawn --userscript emacsclient-wrapper '(qutebrowser-pass-password-only \"{url}\")'")
+  config.bind(',o', "spawn --userscript emacsclient-wrapper '(qutebrowser-pass-otp \"{url}\")'")
+#+end_src
+
+Also use the command launcher
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py
+  config.bind(':', "spawn --userscript emacsclient-wrapper '(qutebrowser-consult-command)'")
+#+end_src
+
+
+I use buffers to manage open pages so there's no need for tabs.
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py
+  c.new_instance_open_target = "tab-silent"
+  c.tabs.show = "multiple"
+  c.tabs.tabs_are_windows = True
+#+end_src
+
+Enable dark mode to save my eyes.
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py
+  c.colors.webpage.darkmode.enabled = True
+  c.colors.webpage.darkmode.policy.images = "smart-simple"
+#+end_src
+
+Finally, let's use ~qutebrowser.el~ to synchronize themes between Emacs and the browser.
+
+#+begin_src python :tangle ~/.config/qutebrowser/config.py
+  config.source("emacs_theme.py")
+#+end_src
+
+** Password manager
+
+I use Bitwarden as a password manager, there is a package that allows it to hook up into Emacs' ~auth-source~ mechanism.
+
+#+begin_src elisp :tangle yes
+  (use-package bitwarden
+    :ensure (:host github :repo "seanfarley/emacs-bitwarden")
+    :ensure-system-package (bw . bitwarden-cli)
+    :custom
+    (bitwarden-user "patryk@gorscy.net")
+    :init
+    (setq bitwarden-automatic-unlock
+          (let* ((matches (auth-source-search :host "vault.bitwarden.com"
+                                              :require '(:secret)
+                                              :max 1))
+                 (entry (nth 0 matches)))
+            (plist-get entry :secret)))
+    (setq bitwarden-api-secret-key
+          (plist-get (car (auth-source-search :host "bitwarden.key"))
+                     :secret))
+    (setq bitwarden-api-client-id
+          (plist-get (car (auth-source-search :host "bitwarden.id"))
+                     :secret))
+    :config
+    (bitwarden-auth-source-enable)
+    (bitwarden-login)
+    (bitwarden-unlock))
+#+end_src
+
+#+RESULTS:
+: [nil 26717 19853 906159 nil elpaca-process-queues nil nil 507000 nil]
+
+And a nice ~completing-read~ interface to boot.
+
+#+begin_src elisp :tangle yes
+  (use-package password-menu
+    :ensure t
+    :commands password-menu-completing-read)
+#+end_src
+
+** VPN
+
+I've added every computer I own to a ~tailscale~ network. Of course there's an Emacs package for that...
+
+#+begin_src elisp :tangle yes
+  (use-package tailmacs
+    :ensure (:host github :repo "ben-maclaurin/tailmacs")
+    :ensure-system-package (tailscale
+                            (ssh . openssh))
+    :commands (tailmacs)
+    :after bitwarden
+    :init
+    (setq tailmacs-access-token
+          (funcall (plist-get (car (auth-source-search :host "api.tailscale.com"))
+                     :secret)))
+    (setq tailmacs-organization
+          (plist-get (car (auth-source-search :host "api.tailscale.com"))
+                     :user)))
+  
+#+end_src
+
+#+RESULTS:
+: [nil 26717 19844 644675 nil elpaca-process-queues nil nil 567000 nil]
+
+Before we can use it, we need to install and connect to the tailnet.
+
+#+begin_src sh
+  curl -fsSL https://tailscale.com/install.sh | sh &&
+  sudo tailscale up
+#+end_src
+
+* Editor
+
+** Modal editing
+
+I'll be using the ~meow~ package, ~evil-mode~ is very mature and possibly the best Vim emulation in any editor, but I want
+a more performant and cohesive experience. However, I'm changing the recommended keybindings to feel more at home.
+
+I'm also doing some hook magic so that the keypad can be used in ~EXWM~ buffers
+
+#+begin_src elisp :tangle yes
+  (use-package meow
+    :ensure t
+    :init
+    (defun meow-setup ()
+      (setq meow-cheatsheet-layout meow-cheatsheet-layout-qwerty)
+      (meow-motion-define-key
+       '("j" . meow-next)
+       '("k" . meow-prev)
+       '("<escape>" . ignore))
+      (meow-leader-define-key
+       ;; Use SPC (0-9) for digit arguments.
+       '("1" . meow-digit-argument)
+       '("2" . meow-digit-argument)
+       '("3" . meow-digit-argument)
+       '("4" . meow-digit-argument)
+       '("5" . meow-digit-argument)
+       '("6" . meow-digit-argument)
+       '("7" . meow-digit-argument)
+       '("8" . meow-digit-argument)
+       '("9" . meow-digit-argument)
+       '("0" . meow-digit-argument)
+       '(":" . "M-x")
+       '("<return>" . embark-act)
+       '("/" . meow-keypad-describe-key)
+       '("?" . meow-cheatsheet))
+      (meow-normal-define-key
+       '(":" . "M-x")
+       '("<return>" . embark-dwim)
+       '("9" . meow-expand-9)
+       '("8" . meow-expand-8)
+       '("7" . meow-expand-7)
+       '("6" . meow-expand-6)
+       '("5" . meow-expand-5)
+       '("4" . meow-expand-4)
+       '("3" . meow-expand-3)
+       '("2" . meow-expand-2)
+       '("1" . meow-expand-1)
+       '("-" . negative-argument)
+       '(";" . meow-reverse)
+       '("#" . comment-dwim)
+       '("C-e" . meow-inner-of-thing)
+       '("C-a" . meow-bounds-of-thing)
+       '("[" . meow-beginning-of-thing)
+       '("]" . meow-end-of-thing)
+       '("a" . meow-append)
+       '("o" . meow-open-below)
+       '("b" . meow-back-word)
+       '("B" . meow-back-symbol)
+       '("c" . meow-change)
+       '("x" . meow-delete)
+       '("X" . meow-backward-delete)
+       '("w" . meow-next-word)
+       '("W" . meow-next-symbol)
+       '("f" . meow-find)
+       '("<escape>" . meow-cancel-selection)
+       '("g" . meow-grab)
+       '("h" . meow-left)
+       '("H" . meow-left-expand)
+       '("i" . meow-insert)
+       '("O" . meow-open-above)
+       '("j" . meow-next)
+       '("J" . meow-next-expand)
+       '("k" . meow-prev)
+       '("K" . meow-prev-expand)
+       '("l" . meow-right)
+       '("L" . meow-right-expand)
+       '("m" . meow-join)
+       '("n" . meow-search)
+       '("e" . meow-block)
+       '("E" . meow-to-block)
+       '("p" . meow-yank)
+       '("q" . meow-quit)
+       '("g" . meow-goto-line)
+       '("r" . meow-replace)
+       '("R" . meow-swap-grab)
+       '("d" . meow-kill)
+       '("F" . meow-till)
+       '("u" . meow-undo)
+       '("U" . meow-undo-in-selection)
+       '("/" . meow-visit)
+       '("v" . meow-mark-symbol)
+       '("V" . meow-line)
+       '("y" . meow-save)
+       '("I" . (lambda () (interactive) (meow-beginning-of-thing ?l) (meow-insert-mode)))
+       '("A" . (lambda () (interactive) (meow-end-of-thing ?l) (meow-insert-mode)))
+       '("G" . (lambda () (interactive) (meow-end-of-thing ?b)))
+       '("0" . (lambda () (interactive) (meow-beginning-of-thing ?l)))
+       '("$" . (lambda () (interactive) (meow-end-of-thing ?l)))
+       '(">" . meow-indent)
+       '("Y" . meow-sync-grab)
+       '("z" . meow-pop-selection)
+       '("." . repeat)))
+    :config
+    (meow-setup)
+    (meow-global-mode 1)
+    (add-hook 'meow-keypad-mode-hook (lambda ()
+      (when (derived-mode-p 'exwm-mode)
+        (if meow-keypad-mode
+            (exwm-input-grab-keyboard exwm--id)
+          (exwm-input-release-keyboard exwm--id))))))
+#+end_src
+
+** Completion
+
+*** Auto-completion
+
+The ~corfu~ package allows for auto-completion with a simple popup using the built-in ~completion-in-region~ function.
+I configure the TAB and go style of completion, as well as a few recommended defaults from the project wiki.
+
+I hope to clean this up soon when ~corfu~ starts working properly with ~EXWM~. There are a few hacks here so take care.
+
+#+begin_src elisp :tangle yes
+  (use-package corfu
+    :ensure t
+    :demand t
+    :custom
+    (corfu-auto t)  
+    (corfu-cycle t)           ;; Enable cycling for `corfu-next/previous'
+    (corfu-preselect 'prompt) ;; Always preselect the prompt
+    (tab-always-indent 'complete)
+    (text-mode-ispell-word-completion nil)
+    (read-extended-command-predicate #'command-completion-default-include-p)
+    :bind
+    (:map corfu-map
+          ("TAB" . corfu-next)
+          ([tab] . corfu-next)
+          ("S-TAB" . corfu-previous)
+          ([backtab] . corfu-previous))
+    
+    :config
+    (defun advise-corfu-make-frame-with-monitor-awareness (orig-fun frame x y width height)
+      "Advise `corfu--make-frame` to be monitor-aware, adjusting X and Y according to the focused monitor."
+      ;; Get the geometry of the currently focused monior
+      (let* ((selected-frame-position (frame-position))
+             (selected-frame-x (car selected-frame-position))
+             (selected-frame-y (cdr selected-frame-position))
+             (new-x (+ selected-frame-x x))
+             (new-y (+ selected-frame-y y)))
+
+        (funcall orig-fun frame new-x new-y width height)))
+
+    (advice-add 'corfu--make-frame :around #'advise-corfu-make-frame-with-monitor-awareness)
+    (add-hook 'corfu-mode-hook
+              (lambda ()
+                (setq-local completion-styles '(orderless-fast basic)
+                            completion-category-overrides nil
+                            completion-category-defaults nil)))
+    (corfu-history-mode)
+    (add-to-list 'savehist-additional-variables 'corfu-history)
+    ;;TODO make this work:
+    (corfu-popupinfo-mode)
+    (corfu-echo-mode)
+    (global-corfu-mode))
+#+end_src
+
+And icons, of course.
+
+#+begin_src elisp :tangle yes
+  (use-package nerd-icons-corfu
+    :ensure t
+    :after corfu
+    :config
+    (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
+#+end_src
+
+*** Templates
+
+The ~Templ~ package expands on the built-in ~Tempo.el~ and integrates nicely with ~corfu~.
+
+#+begin_src elisp :tangle yes
+  (use-package tempel
+    :ensure t
+    :bind (("M-+" . tempel-complete) ;; Alternative tempel-expand
+           ("M-*" . tempel-insert))
+    :commands tempel-expand
+    :init
+    (defun tempel-setup-capf ()
+      (setq-local completion-at-point-functions
+                  (cons #'tempel-expand
+                        completion-at-point-functions)))
+    
+    (add-hook 'conf-mode-hook 'tempel-setup-capf)
+    (add-hook 'prog-mode-hook 'tempel-setup-capf)
+    (add-hook 'text-mode-hook 'tempel-setup-capf))
+  
+  (use-package tempel-collection
+    :ensure t)
+#+end_src
+
+*** Multiple Major modes
+
+~corfu~ doesn't support using multiple major modes in the same buffer, but we can play around with the ~polymode~ to, for example enable it in ~org-mode~'s ~src~ blocks.
+
+#+begin_src elisp :tangle yes
+  (use-package poly-org
+    :after polymode
+    :ensure t
+    :mode ("\\.org\\'" . poly-org-mode))
+#+end_src
+
+*** LSP
+
+I'll be using Emacs' recently-built-in ~eglot~ package, there's not much need to configure it, as it mostly works out of the box.
+
+It can however be sped up significantly using the ~emacs-lsp-booster~ binary.
+
+#+begin_src elisp :tangle yes
+  (use-package eglot-booster
+    :ensure (:host github :repo "jdtsmith/eglot-booster")
+    :ensure-system-package emacs-lsp-booster
+    :after eglot
+    :config	(eglot-booster-mode))
+#+end_src
+
+** Language support
+
+This section adds some missing major modes to Emacs and configures additional features for them.
+
+   
+*** Rust
+
+#+begin_src elisp :tangle yes
+  (use-package rust-mode
+    :ensure t
+    :ensure-system-package ("/usr/include/tree_sitter/tree-sitter-rust.h" . tree-sitter-rust)
+    :mode "\\.rs\\'"
+    :init
+    (setq rust-mode-treesitter-derive t))
+
+  (use-package rustic
+    :ensure t
+    :ensure-system-package rust-analyzer
+    :after rust-mode
+    :init
+    (setq rustic-cargo-bin-remote "/usr/local/cargo/bin/cargo")
+    (setq rustic-lsp-client 'eglot))
+#+end_src
+
+*** Erlang
+
+#+begin_src elisp :tangle yes
+  (use-package erlang
+    :ensure t
+    :mode ("\\.erl\\'" . erlang-mode)
+    :config
+    (add-hook 'erlang-mode-hook
+              (lambda ()
+                (setq mode-name "erl"
+                      erlang-compile-extra-opts '((i . "../include"))
+                      erlang-root-dir "/usr/local/lib/erlang"))))
+#+end_src
+
+** TODO Devcontainers
+** Terminal
+
+I use ~eshell~ and ~eat~ package in addition to providing its own terminal emulator massively enhances it.
+
+#+begin_src elisp :tangle yes
+  (use-package eat
+    :ensure t
+    :commands eat
+    :hook ((eshell-load . eat-eshell-mode)
+           (eshell-load . eat-eshell-visual-command-mode)))
+#+end_src
+
+#+RESULTS:
+: [nil 26618 22584 534680 nil elpaca-process-queues nil nil 142000 nil]
+
+Add shell integration.
+
+#+begin_src bash :tangle ~/.bashrc :shebang "#!/bin/bash"
+  [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && \
+      source "$EAT_SHELL_INTEGRATION_DIR/bash"
+ #+end_src
+
+** LLMs
+
+*** Github Copilot
+#+begin_src elisp :tangle yes
+  ;; (use-package copilot
+  ;;   :ensure (:host github :repo "copilot-emacs/copilot.el" :files ("*.el"))
+  ;;   :hook (prog-mode . copilot-mode)
+  ;;   :bind (:map copilot-completion-map
+  ;;               ("<tab>" . 'copilot-accept-completion)
+  ;;               ("TAB" . 'copilot-accept-completion)
+  ;;               ("C-TAB" . 'copilot-accept-completion-by-word)
+  ;;               ("C-<tab>" . 'copilot-accept-completion-by-word)))
+ #+end_src
+
+ #+RESULTS:
+ : [nil 26623 21407 124002 nil elpaca-process-queues nil nil 615000 nil]
+
+* Org mode
+
+** TODO Exports
+
+#+begin_src elisp :tangle yes
+  (use-package org
+    :ensure nil
+    :ensure-system-package ((pandoc . pandoc-cli)
+                            (pdflatex . texlive))
+    :config
+    (setq org-format-latex-options (plist-put org-format-latex-options :scale 1.4))
+    (setq org-latex-listings 'minted
+          org-latex-packages-alist '(("" "minted"))
+          org-latex-pdf-process
+          '("pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+            "pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
+    (setq org-latex-minted-options '(("breaklines" "true")
+                                     ("breakanywhere" "true")))
+    (setq org-confirm-babel-evaluate nil))
+#+end_src
+
+#+RESULTS:
+
+** Science
+
+I do most of my assignments in ~Jupyter~. This package allow for a great deal of integration with ~org-mode~.
+
+#+begin_src elisp :tangle yes
+  (use-package jupyter
+    :ensure t
+    :config
+    (org-babel-do-load-languages
+     'org-babel-load-languages
+     '((emacs-lisp . t)
+       (julia . t)
+       (python . t)
+       (jupyter . t))))
+#+end_src
+
+** Styling
+
+I use the ~org-modern~ package to make viewing ~org~ buffers much more pleasant. I combine it with parts of [[https://zzamboni.org/post/beautifying-org-mode-in-emacs/][Diego Zamboni's]] Org mode configuration. And the ~org-moder-indent~ package, which allows it to work
+with ~org-indent-mode~.
+
+#+begin_src elisp :tangle yes
+  (use-package org-modern
+    :ensure t
+    :custom
+    (org-modern-hide-stars nil)		; adds extra indentation
+    (org-modern-table nil)
+    (org-modern-list 
+     '((?- . "-")
+       (?* . "•")
+       (?+ . "‣")))
+    (org-modern-block-name '("" . "")) ; or other chars; so top bracket is drawn promptly
+    :hook
+    (org-mode . org-modern-mode)
+    (org-agenda-finalize . org-modern-agenda)
+    :init
+    (setq
+     ;; Edit settings
+     org-auto-align-tags nil
+     org-tags-column 0
+     org-catch-invisible-edits 'show-and-error
+     org-special-ctrl-a/e t
+     org-insert-heading-respect-content t
+     org-startup-with-latex-preview t
+     org-startup-with-inline-images t
+     ;; Org styling, hide markup etc.
+     org-hide-emphasis-markers t
+     org-pretty-entities t
+     org-agenda-tags-column 0)
+    (add-hook 'org-mode-hook 'visual-line-mode)
+    (add-hook 'org-mode-hook 'variable-pitch-mode)
+    :config
+    (set-face-attribute 'org-block nil :inherit 'fixed-pitch)
+  (set-face-attribute 'org-modern-indent-bracket-line nil :inherit 'fixed-pitch)
+    (set-face-attribute 'org-level-1 nil :height 1.5)
+    (set-face-attribute 'org-level-2 nil :height 1.25)
+    (set-face-attribute 'org-level-3 nil :height 1.1)
+    (set-face-attribute 'org-document-title nil :height 2.0))
+  #+end_src
+
+  #+RESULTS:
+  : [nil 26585 50829 139629 nil elpaca-process-queues nil nil 722000 nil]
+
+#+begin_src elisp :tangle yes
+(use-package org-modern-indent
+  :ensure (:host github :repo "jdtsmith/org-modern-indent")
+  :init
+  (setq org-startup-indented t)
+  :config ; add late to hook
+  (add-hook 'org-mode-hook #'org-modern-indent-mode 90))
+#+end_src
+
+#+RESULTS:
+: [nil 26585 50845 107180 nil elpaca-process-queues nil nil 303000 nil]
+
+
+
