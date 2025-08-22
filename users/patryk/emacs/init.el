@@ -127,7 +127,6 @@
      '("0" . meow-digit-argument)
      '(":" . "M-x")
      '("RET" . embark-act)
-     '("g" . "C-c g")
      '("/" . meow-keypad-describe-key)
      '("?" . meow-cheatsheet))
     (meow-normal-define-key
