@@ -127,6 +127,7 @@
      '("0" . meow-digit-argument)
      '(":" . "M-x")
      '("RET" . embark-act)
+     '("g" . "C-c g")
      '("/" . meow-keypad-describe-key)
      '("?" . meow-cheatsheet))
     (meow-normal-define-key
@@ -532,9 +533,9 @@
 (use-package magit
   :ensure t
   :bind (:map mode-specific-map
-	      ("g g" . magit-status)
-	      ("g d" . magit-dispatch)
-	      ("g f" . magit-file-dispatch)))
+	      ("v v" . magit-status)
+	      ("v d" . magit-dispatch)
+	      ("v f" . magit-file-dispatch)))
 
 (use-package consult-omni
   :ensure (:host github :repo "armindarvish/consult-omni" :files (:defaults "sources/*.el"))
