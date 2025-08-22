@@ -502,7 +502,10 @@
   :bind (:map mode-specific-map
 	      ("f p" . password-menu-completing-read)))
 
-(use-package transient :ensure t)
+(use-package transient
+  :ensure t
+  :bind (:map transient-map
+	      ("<escape>" . transient-quit-one)))
 
 (use-package gptel
   :ensure t
