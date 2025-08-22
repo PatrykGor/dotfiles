@@ -43,6 +43,20 @@
   ;; Enable use-package :ensure support for Elpaca.
   (elpaca-use-package-mode))
 
+;; (use-package compile-angel
+;;   :ensure t
+;;   :demand t
+;;   :config
+;;   ;; Set `compile-angel-verbose' to nil to disable compile-angel messages.
+;;   ;; (When set to nil, compile-angel won't show which file is being compiled.)
+;;   (setq compile-angel-verbose nil)
+
+;;   (add-hook 'emacs-lisp-mode-hook #'compile-angel-on-save-local-mode)
+
+;;   ;; A global mode that compiles .el files before they are loaded
+;;   ;; using `load' or `require'.
+;;   (compile-angel-on-load-mode 1))
+
 (use-package exwm
   :ensure nil
   :custom
@@ -62,8 +76,10 @@
      ([?\s-k] . windmove-up)
      ([?\s-l] . windmove-right)
      ([?\s-q] . kill-buffer-and-window)
+     ([?\s-w] . consult-omni-knowledge)
+     ([?\s-f] . consult-omni-local)
      (, (kbd "s-SPC") . meow-keypad)
-     ([?\s-e] . app-launcher-run-app)))
+     ([?\s-e] . consult-omni-app)))
   (exwm-layout-show-all-buffers t)
   (exwm-workspace-show-all-buffers t)
     :init
@@ -267,7 +283,10 @@
   :custom
   (corfu-auto t)          ;; Enable auto completion
   :bind
-  (:map corfu-map ("C-SPC" . corfu-insert-separator))
+  (:map corfu-map
+	("C-j" . corfu-next)
+	("C-k" . corfu-previous)
+	("C-SPC" . corfu-insert-separator))
   :init
   (defun +advise-corfu-make-frame-with-monitor-awareness (orig-fun frame x y width height)
     "Advise `corfu--make-frame` to be monitor-aware, adjusting X and Y according to the focused monitor."
@@ -293,6 +312,13 @@
   (minibuffer-prompt-properties
    '(read-only t cursor-intangible t face minibuffer-prompt))
   (vertico-cycle t)
+  :bind
+  (:map vertico-map
+	("C-j" . vertico-previous)
+	("C-k" . vertico-next)
+  	("C-n" . vertico-previous-group)
+	("C-p" . vertico-next-group))
+
   :init
   (vertico-mode)
   :config
@@ -431,6 +457,7 @@
    ("C-h C-k" . helpful-key)
    ("C-h C-p" . elpaca-visit)
    ("C-h C-x" . helpful-command)
+   :map emacs-lisp-mode-map
    ([remap describe-symbol] . helpful-at-point)))
   
 (use-package dired-auto-readme
@@ -467,27 +494,35 @@
         (plist-get (car (auth-source-search :host "bitwarden.id"))
                    :secret))
   :config
-  (bitwarden-auth-source-enable))
-  ;; (bitwarden-login)
-  ;;(bitwarden-unlock))
+  (bitwarden-auth-source-enable)
+  (bitwarden-login)
+  (bitwarden-unlock))
 
+(use-package password-menu
+  :ensure t
+  :demand t
+  :bind (:map mode-specific-map
+	      ("f p" . password-menu-completing-read)))
 
 (use-package transient :ensure t)
 
 (use-package gptel
   :ensure t
+  :after password-menu
+  :custom
+  (gptel-default-mode #'org-mode)
+  (gptel-include-reasoning nil)
   :bind
   (:map mode-specific-map
 	("a s" . gptel-send)
 	("a m" . gptel-menu)
 	("a r" . gptel-rewrite)
-	("a c" . gptel)))
-  ;; :config
-  ;; (setq
-  ;;  gptel-model 'gemini-2.5-pro-exp-03-25
-  ;;  gptel-backend (gptel-make-gemini "Gemini"
-  ;; 				    :key "YOUR_GEMINI_API_KEY"
-  ;; 				    :stream t)))
+	("a c" . gptel))
+  :config
+  (setq
+   gptel-model 'gemini-2.5-pro
+   gptel-backend (gptel-make-gemini "Gemini"
+		   :key (password-menu-fetch-password :host "api.aistudio.google.com"))))
 
 (use-package catppuccin-theme
   :ensure t
@@ -495,3 +530,238 @@
   (catppuccin-flavor 'macchiato)
   :config
   (load-theme 'catppuccin :no-confirm))
+
+(use-package magit
+  :ensure t
+  :commands (magit-status magit-dispatch magit-file-dispatch))
+
+(use-package consult-omni
+  :ensure (:host github :repo "armindarvish/consult-omni" :files (:defaults "sources/*.el"))
+  :after (consult password-menu)
+  :commands
+  (consult-omni-knowledge
+   consult-omni-app
+   consult-omni-local)
+  :bind
+  (:map mode-specific-map
+	("f p" . consult-omni-projects)
+	("f f" . consult-omni-project))
+  :custom
+  ;;; General settings that apply to all sources
+  (consult-omni-show-preview t) ;;; show previews
+  (consult-omni-preview-key "C-o") ;;; set the preview key to C-o
+  (consult-omni-highlight-matches-in-minibuffer t) ;;; highlight matches in minibuffer
+  (consult-omni-gptel-model 'gemini-2.5-flash)
+  (consult-omni-projects-vc-backend 'magit)
+  (consult-omni-projects-default-project-folder "~/Projects")
+  :config
+  (setq consult-omni-stackexchange-api-key (password-menu-fetch-password :host "api.stackexchange.com"))
+  (setq consult-omni-scopus-api-key (password-menu-fetch-password :host "api.elsevier.com"))
+  (setq consult-omni-google-customsearch-key (password-menu-fetch-password :host "api.customsearch.google.com"))
+  (setq consult-omni-google-customsearch-cx (password-menu-fetch-password :host "cx.customsearch.google.com"))
+  (setq consult-omni-sources-modules-to-load (list
+					      'consult-omni-apps
+					      'consult-omni-google
+					      'consult-omni-google-autosuggest
+					      'consult-omni-buffer
+					      'consult-omni-calc
+					      ;; 'consult-omni-consult-notes
+					      'consult-omni-dict
+					      ;; 'consult-omni-gh
+					      'consult-omni-gptel
+					      'consult-omni-git-grep
+					      'consult-omni-ripgrep-all
+					      'consult-omni-find
+					      'consult-omni-locate
+					      'consult-omni-line-multi
+					      'consult-omni-man
+					      'consult-omni-projects
+					      'consult-omni-scopus
+					      'consult-omni-stackoverflow
+					      'consult-omni-wikipedia))
+  (require 'consult-omni-sources)
+  ;;; Load Sources Core code
+  (consult-omni-sources-load-modules)
+  ;;; Load Embark Actions
+  (require 'consult-omni-embark)
+  ;; consult-omni-web
+  (defvar consult-omni-knowledge-sources (list
+					  "gptel"
+					  "calc"
+					  ;; "man"
+                                          "Dictionary"
+					  "Google"
+					  "Google AutoSuggest"
+					  ;; "consult-notes"
+					  "StackOverflow"
+                                          "Wikipedia"
+                                          ;; "GitHub"
+					  "Scopus"
+                                          ;; "Invidious"
+                                          ))
+  (defun consult-omni-knowledge (&optional initial prompt sources no-callback &rest args)
+    "Interactive knowledge search”
+
+This is similar to `consult-omni-multi', but runs the search on
+sources defined in `consult-omni-knowledge-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "Knowledge" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-knowledge-sources)))
+      (consult-omni-multi initial prompt sources no-callback args)))
+
+  (defun +consult-omni--find-project-builder (input &rest args &key callback &allow-other-keys)
+    (pcase-let* ((`(,query . ,opts) (consult-omni--split-command input (seq-difference args (list :callback callback))))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (hidden (if (plist-member opts :hidden) (plist-get opts :hidden) consult-omni-find-show-hidden-files))
+               (ignore (plist-get opts :ignore))
+               (ignore (if ignore (format "%s" ignore)))
+               (dir (project-root (project-current)))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (count (or (and count (integerp (read count)) (string-to-number count))
+                          consult-omni-default-count))
+               (default-directory (or dir default-directory))
+               (`(_ ,paths _) (consult--directory-prompt "" dir))
+               (paths (if dir
+                          (mapcar (lambda (path) (file-truename (concat dir path))) paths)
+                        paths))
+               (consult-find-args (concat consult-omni-find-args
+                                          (if (not hidden) " -not -iwholename *./[a-z]*")
+                                          (if ignore (concat " -not -iwholename *" ignore "*")))))
+    (funcall (consult--find-make-builder paths) query)))
+
+  (consult-omni-define-source "find-project"
+                            :narrow-char ?f
+                            :category 'file
+                            :type 'async
+                            :require-match t
+                            :face 'consult-omni-engine-title-face
+                            :request #'+consult-omni--find-project-builder
+                            :transform #'consult-omni--find-transform
+                            :filter #'consult-omni--find-filter
+                            :on-preview #'consult-omni--find-preview
+                            :on-return #'identity
+                            :on-callback #'consult-omni--find-callback
+                            :preview-key consult-omni-preview-key
+                            :search-hist 'consult-omni--search-history
+                            :select-hist 'consult-omni--selection-history
+                            :group #'consult-omni--group-function
+                            :sort t
+                            :interactive consult-omni-intereactive-commands-type
+                            :enabled (lambda () (executable-find "find"))
+                            :annotate nil)
+  
+  (defvar consult-omni-project-sources (list
+				      "Project Buffer"
+				      "Project File"
+				      "git-grep"
+				      "find-project"
+                                      ))
+  (defun consult-omni-project (&optional initial prompt sources no-callback &rest args)
+    "Interactive in-project search”
+
+This is similar to `consult-omni-multi', but runs the search on
+sources defined in `consult-omni-project-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "Project" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-project-sources)))
+      (consult-omni-multi initial prompt sources no-callback args)))
+
+    (defvar consult-omni-local-sources (list
+					"Buffer"
+					"buffers text search"
+					"Bookmark"
+					"File"
+					"locate"
+					"ripgrep-all"
+                                      ))
+  (defun consult-omni-local (&optional initial prompt sources no-callback &rest args)
+    "Interactive local sources search”
+
+This is similar to `consult-omni-multi', but runs the search on
+sources defined in `consult-omni-local-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "System" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-local-sources)))
+      (consult-omni-multi initial prompt sources no-callback args)))
+
+  (defun +consult-omni--nixpkgs-builder (input &rest args &key callback &allow-other-keys)
+    (pcase-let* ((`(,query . ,opts) (consult-omni--split-command input (seq-difference args (list :callback callback)))))
+      (list "nix-search" "--json" query)))
+
+  (defun +consult-omni--nixpkgs-pre-transform (lines)
+    (json-read-from-string (mapconcat 'identity lines)))
+		     
+  (defun +consult-omni--nixpkgs-transform (candidates &optional query)
+    (mapcar (lambda (item)
+              (let*
+                  ((source "nixpkgs")
+                   (path (alist-get 'path item))
+		   (title (alist-get 'name item))
+                   (snippet (alist-get 'description item))
+		   (exec (alist-get 'mainProgram item))
+		   (visible t)
+                   (decorated (funcall #'consult-omni--apps-format-candidates :source source :query query :title title :path path :snippet snippet :visible visible)))
+                (propertize decorated
+                            :source source
+                            :title title
+                            :url nil
+                            :search-url nil
+                            :query query
+			    :path path
+			    :exec exec
+			    :app title
+                            :snippet snippet)))
+	    (+consult-omni--nixpkgs-pre-transform candidates)))
+
+  (defun +consult-omni--nixpkgs-callback (cand)
+    (let ((app (get-text-property 0 :app cand)))
+      (nix-eshell-with-packages (list (format "%s" app)))))
+      
+  (consult-omni-define-source "Nixpkgs"
+			      :narrow-char ?n
+			      :type 'async
+			      :request #'+consult-omni--nixpkgs-builder
+			      :transform #'+consult-omni--nixpkgs-transform
+			      :on-preview #'ignore
+                              :on-return #'+consult-omni--nixpkgs-callback
+			      :min-input 3
+			      :annotate nil
+			      :require-match t
+			      :enabled t
+			      :sort t
+			      :group #'consult-omni--group-function
+			      :preview-key consult-omni-preview-key
+			      :search-hist 'consult-omni--search-history
+			      :select-hist 'consult-omni--apps-select-history
+			      :interactive consult-omni-intereactive-commands-type)
+			      
+  (defvar consult-omni-app-sources (list
+				    "Nixpkgs"
+				    "Apps"
+                                    ))
+  (defun consult-omni-app (&optional initial prompt sources no-callback &rest args)
+    "Interactive apps and packages search”
+
+This is similar to `consult-omni-multi', but runs the search on
+sources defined in `consult-omni-app-sources'.
+See `consult-omni-multi' for more details.
+"
+    (interactive "P")
+    (let ((prompt (or prompt (concat "[" (propertize "App" 'face 'consult-omni-prompt-face) "]" " Search:  ")))
+          (sources (or sources consult-omni-app-sources)))
+      (consult-omni-multi initial prompt sources no-callback args))))
+
+(use-package emacs
+  :ensure nil
+  :init
+  (setq backup-directory-alist
+      `((".*" . ,temporary-file-directory)))
+  (setq auto-save-file-name-transforms
+      `((".*" ,temporary-file-directory t))))

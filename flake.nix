@@ -14,6 +14,9 @@
 
     # nixarr
     nixarr.url = "github:rasmus-kirk/nixarr";
+
+    # catppcucin
+    catppuccin.url = "github:catppuccin/nix";
   };
 
   outputs = {
@@ -21,6 +24,7 @@
       nixpkgs,
       home-manager,
       nixarr,
+      catppuccin,
       ...
   } @ inputs: let
     inherit (self) outputs;
@@ -39,6 +43,7 @@
 	          home-manager.extraSpecialArgs = specialArgs;
 	          home-manager.users.patryk = import ./users/patryk/home.nix;
           }
+          catppuccin.nixosModules.catppuccin
         ];
       };
       home-server = nixpkgs.lib.nixosSystem {

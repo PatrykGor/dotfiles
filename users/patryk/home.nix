@@ -16,6 +16,7 @@
     # ./nvim.nix
     ./emacs
     ./xsession.nix
+    inputs.catppuccin.homeModules.catppuccin
   ];
 
   home = {
@@ -23,11 +24,26 @@
     homeDirectory = "/home/patryk";
   };
 
+  # Colors
+  catppuccin = {
+    enable = true;
+    flavor = "macchiato";
+  };
+
   gtk = {
     enable = true;
     theme = {
-      package = pkgs.palenight-theme;
-      name = "palenight";
+      package = pkgs.magnetic-catppuccin-gtk.override { tweaks = [ "macchiato" ]; };
+      name = "Catppuccin-GTK-Dark-Macchiato";
+    };
+  };
+
+  services.picom = {
+    enable = true;
+    backend = "glx";
+    settings = {
+      corner-radius = 12;
+      vsync = true;
     };
   };
 
@@ -36,6 +52,8 @@
     userEmail = "patryk@gorscy.net";
     userName = "Patryk Górski";
   };
+
+  programs.gh.enable = true;
   
   home.file.authinfo = {
     source = ../../secrets/authinfo;
@@ -52,7 +70,10 @@
   # Add stuff for your user as you see fit:
   # programs.neovim.enable = true;
   home.packages = with pkgs; [
+    ripgrep-all
+    nix-search
     git-crypt
+    gtk3
     dconf
     ungoogled-chromium
     arandr

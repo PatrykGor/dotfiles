@@ -57,6 +57,19 @@
     registry = lib.mapAttrs (_: flake: {inherit flake;}) flakeInputs;
     nixPath = lib.mapAttrsToList (n: _: "${n}=flake:${n}") flakeInputs;
   };
+
+  # Colors
+  catppuccin = {
+    enable = true;
+    flavor = "macchiato";
+  };
+
+  services.displayManager.sddm = {
+    enable = true;
+    package = pkgs.kdePackages.sddm;
+  };
+
+  services.locate.enable = true;
   
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
@@ -97,10 +110,10 @@
     desktopManager.session = [
       {
         name = "home-manager";
-	start = ''
-	  ${pkgs.runtimeShell} $HOME/.xsession &
-	  waitPID=$!
-	'';
+	      start = ''
+	            ${pkgs.runtimeShell} $HOME/.xsession &
+	            waitPID=$!
+	      '';
       }
     ];
   };
