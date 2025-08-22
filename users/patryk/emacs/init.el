@@ -43,19 +43,17 @@
   ;; Enable use-package :ensure support for Elpaca.
   (elpaca-use-package-mode))
 
-;; (use-package compile-angel
-;;   :ensure t
-;;   :demand t
-;;   :config
-;;   ;; Set `compile-angel-verbose' to nil to disable compile-angel messages.
-;;   ;; (When set to nil, compile-angel won't show which file is being compiled.)
-;;   (setq compile-angel-verbose nil)
+(use-package compile-angel
+  :ensure t
+  :demand t
+  :config
+  ;; Set `compile-angel-verbose' to nil to disable compile-angel messages.
+  ;; (When set to nil, compile-angel won't show which file is being compiled.)
+  (setq compile-angel-verbose nil)
 
-;;   (add-hook 'emacs-lisp-mode-hook #'compile-angel-on-save-local-mode)
-
-;;   ;; A global mode that compiles .el files before they are loaded
-;;   ;; using `load' or `require'.
-;;   (compile-angel-on-load-mode 1))
+  ;; A global mode that compiles .el files before they are loaded
+  ;; using `load' or `require'.
+  (compile-angel-on-load-mode 1))
 
 (use-package exwm
   :ensure nil
@@ -533,7 +531,10 @@
 
 (use-package magit
   :ensure t
-  :commands (magit-status magit-dispatch magit-file-dispatch))
+  :bind (:map mode-specific-map
+	      ("g g" . magit-status)
+	      ("g d" . magit-dispatch)
+	      ("g f" . magit-file-dispatch)))
 
 (use-package consult-omni
   :ensure (:host github :repo "armindarvish/consult-omni" :files (:defaults "sources/*.el"))
