@@ -70,9 +70,9 @@
 
   programs.gpg = {
     enable = true;
-    settings = {
-      pinentry-mode = "loopback";
-    };
+    # settings = {
+    #   pinentry-mode = "loopback";
+    # };
   };
 
   home.sessionVariables = {
@@ -81,10 +81,10 @@
   
   services.gpg-agent = {
     enable = true;
-    pinentry.package = pkgs.pinentry-tty;
+    pinentry.package = pkgs.pinentry;
     extraConfig = ''
       allow-loopback-pinentry
-      display
+      allow-emacs-pinentry
     '';       
     enableSshSupport = true;
   };

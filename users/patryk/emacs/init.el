@@ -487,7 +487,6 @@
   :after exwm-randr
   :custom
   (bitwarden-user "patryk@gorscy.net")
-  (epg-pinentry-mode 'loopback)
   :init
   (setq bitwarden-automatic-unlock
         (let* ((matches (auth-source-search :host "vault.bitwarden.com"
@@ -790,4 +789,9 @@ See `consult-omni-multi' for more details.
   :ensure t
   :after magit)
   
-
+(use-package pinentry
+  :ensure t
+  :custom
+  (epg-pinentry-mode 'loopback)
+  :config
+  (pinentry-start))
