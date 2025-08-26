@@ -487,10 +487,8 @@
   :after exwm-randr
   :custom
   (bitwarden-user "patryk@gorscy.net")
+  (epg-pinentry-mode 'loopback)
   :init
-  (defun pinentry-emacs (desc prompt ok error)
-    (let ((str (read-passwd (concat (replace-regexp-in-string "%22" "\"" (replace-regexp-in-string "%0A" "\n" desc)) prompt ": "))))
-      str))
   (setq bitwarden-automatic-unlock
         (let* ((matches (auth-source-search :host "vault.bitwarden.com"
                                             :require '(:secret)
