@@ -52,6 +52,9 @@
     enable = true;
     userEmail = "patryk@gorscy.net";
     userName = "Patryk Górski";
+    extraConfig = {
+      github.user = "PatrykGor";
+    };
   };
 
   programs.gh.enable = true;

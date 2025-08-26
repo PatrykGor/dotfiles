@@ -788,6 +788,8 @@ See `consult-omni-multi' for more details.
   (setq auto-save-file-name-transforms
 	`((".*" ,temporary-file-directory t))))
 
-  
+(use-package forge
+  :ensure t
+  :after magit)
   
 
