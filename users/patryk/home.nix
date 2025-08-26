@@ -74,6 +74,11 @@
       pinentry-mode = "loopback";
     };
   };
+
+  home.sessionVariables = {
+    EDITOR = "emacs";
+  };
+  
   services.gpg-agent = {
     enable = true;
     pinentry.package = pkgs.pinentry-tty;
