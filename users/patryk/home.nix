@@ -52,6 +52,10 @@
     enable = true;
     userEmail = "patryk@gorscy.net";
     userName = "Patryk Górski";
+    signing = {
+      key = null;
+      signByDefault = true;
+    };
     extraConfig = {
       github.user = "PatrykGor";
     };
@@ -63,10 +67,16 @@
     source = ../../secrets/authinfo;
     target = ".authinfo";
   };
-  
-  programs.gpg.enable = true;
+
+  programs.gpg = {
+    enable = true;
+    settings = {
+      pinentry-mode = "loopback";
+    };
+  };
   services.gpg-agent = {
     enable = true;
+    pinentry.package = pkgs.pinentry-tty;
     extraConfig = "allow-loopback-pinentry";
     enableSshSupport = true;
   };
