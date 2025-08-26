@@ -43,18 +43,6 @@
   ;; Enable use-package :ensure support for Elpaca.
   (elpaca-use-package-mode))
 
-(use-package compile-angel
-  :ensure t
-  :demand t
-  :config
-  ;; Set `compile-angel-verbose' to nil to disable compile-angel messages.
-  ;; (When set to nil, compile-angel won't show which file is being compiled.)
-  (setq compile-angel-verbose nil)
-
-  ;; A global mode that compiles .el files before they are loaded
-  ;; using `load' or `require'.
-  (compile-angel-on-load-mode 1))
-
 (use-package exwm
   :ensure nil
   :custom
@@ -112,6 +100,7 @@
     (meow-motion-define-key
      '("j" . meow-next)
      '("k" . meow-prev)
+     '("/" . consult-line)
      '("<Escape>" . ignore))
     (meow-leader-define-key
      ;; Use SPC (0-9) for digit arguments.
@@ -350,6 +339,30 @@
   (setq prefix-help-command #'embark-prefix-help-command)
   (context-menu-mode 1)
   (add-hook 'context-menu-functions #'embark-context-menu 100)
+  (defvar embark--target-mode-timer nil)
+  (defvar embark--target-mode-string "")
+
+  (defun embark--target-mode-update ()
+    (setq embark--target-mode-string
+          (if-let (targets (embark--targets))
+              (format "[%s%s] "
+                      (propertize (symbol-name (plist-get (car targets) :type)) 'face 'bold)
+                      (mapconcat (lambda (x) (format ", %s" (plist-get x :type)))
+				 (cdr targets)
+				 ""))
+            "")))
+
+  (define-minor-mode embark-target-mode
+    "Shows the current targets in the modeline."
+    :global t
+    (setq mode-line-misc-info (assq-delete-all 'embark-target-mode mode-line-misc-info))
+    (when embark--target-mode-timer
+      (cancel-timer embark--target-mode-timer)
+      (setq embark--target-mode-timer nil))
+    (when embark-target-mode
+      (push '(embark-target-mode (:eval embark--target-mode-string)) mode-line-misc-info)
+      (setq embark--target-mode-timer
+            (run-with-idle-timer 0.1 t #'embark--target-mode-update))))
   :custom
   (embark-indicators
       '(embark-minimal-indicator  ; default is embark-mixed-indicator
@@ -412,7 +425,6 @@
          ("f k" . consult-kmacro)
          ("f m" . consult-man)
          ("f i" . consult-info)
-	 ("f f" . find-file)
 	 ("f b" . consult-buffer)                ;; orig. switch-to-buffer
          :map isearch-mode-map
          ("M-e" . consult-isearch-history)         ;; orig. isearch-edit-string
@@ -500,7 +512,7 @@
   :ensure t
   :demand t
   :bind (:map mode-specific-map
-	      ("f p" . password-menu-completing-read)))
+	      ("f s" . password-menu-completing-read)))
 
 (use-package transient
   :ensure t
@@ -532,6 +544,11 @@
   :config
   (load-theme 'catppuccin :no-confirm))
 
+(use-package solaire-mode
+  :ensure t
+  :config
+  (solaire-global-mode))
+
 (use-package magit
   :ensure t
   :bind (:map mode-specific-map
@@ -557,13 +574,13 @@
   (consult-omni-highlight-matches-in-minibuffer t) ;;; highlight matches in minibuffer
   (consult-omni-gptel-model 'gemini-2.5-flash)
   (consult-omni-projects-vc-backend 'magit)
+  (consult-omni-dict-number-of-lines 1)
   (consult-omni-projects-default-project-folder "~/Projects")
-  :config
-  (setq consult-omni-stackexchange-api-key (password-menu-fetch-password :host "api.stackexchange.com"))
-  (setq consult-omni-scopus-api-key (password-menu-fetch-password :host "api.elsevier.com"))
-  (setq consult-omni-google-customsearch-key (password-menu-fetch-password :host "api.customsearch.google.com"))
-  (setq consult-omni-google-customsearch-cx (password-menu-fetch-password :host "cx.customsearch.google.com"))
-  (setq consult-omni-sources-modules-to-load (list
+  (consult-omni-stackexchange-api-key (password-menu-fetch-password :host "api.stackexchange.com"))
+  (consult-omni-scopus-api-key (password-menu-fetch-password :host "api.elsevier.com"))
+  (consult-omni-google-customsearch-key (password-menu-fetch-password :host "api.customsearch.google.com"))
+  (consult-omni-google-customsearch-cx (password-menu-fetch-password :host "cx.customsearch.google.com"))
+  (consult-omni-sources-modules-to-load (list
 					      'consult-omni-apps
 					      'consult-omni-google
 					      'consult-omni-google-autosuggest
@@ -580,9 +597,10 @@
 					      'consult-omni-line-multi
 					      'consult-omni-man
 					      'consult-omni-projects
-					      'consult-omni-scopus
+					      ;; 'consult-omni-scopus
 					      'consult-omni-stackoverflow
 					      'consult-omni-wikipedia))
+  :config
   (require 'consult-omni-sources)
   ;;; Load Sources Core code
   (consult-omni-sources-load-modules)
@@ -592,7 +610,7 @@
   (defvar consult-omni-knowledge-sources (list
 					  "gptel"
 					  "calc"
-					  ;; "man"
+					  "man"
                                           "Dictionary"
 					  "Google"
 					  "Google AutoSuggest"
@@ -600,7 +618,7 @@
 					  "StackOverflow"
                                           "Wikipedia"
                                           ;; "GitHub"
-					  "Scopus"
+					  ;; "Scopus"
                                           ;; "Invidious"
                                           ))
   (defun consult-omni-knowledge (&optional initial prompt sources no-callback &rest args)
@@ -766,6 +784,10 @@ See `consult-omni-multi' for more details.
   :ensure nil
   :init
   (setq backup-directory-alist
-      `((".*" . ,temporary-file-directory)))
+	`((".*" . ,temporary-file-directory)))
   (setq auto-save-file-name-transforms
-      `((".*" ,temporary-file-directory t))))
+	`((".*" ,temporary-file-directory t))))
+
+  
+  
+

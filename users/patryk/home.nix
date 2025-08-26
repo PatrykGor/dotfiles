@@ -15,6 +15,7 @@
     # You can also split up your configuration and import pieces of it here:
     # ./nvim.nix
     ./emacs
+    ./arandr
     ./xsession.nix
     inputs.catppuccin.homeModules.catppuccin
   ];
@@ -65,6 +66,11 @@
     enable = true;
     pinentry.package = pkgs.pinentry-emacs;
     enableSshSupport = true;
+  };
+
+  programs.man = {
+    enable = true;
+    generateCaches = true;
   };
 
   # Add stuff for your user as you see fit:
