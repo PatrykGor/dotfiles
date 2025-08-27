@@ -482,9 +482,15 @@
   :after nerd-icons
   :init (doom-modeline-mode 1))
 
+(use-package password-menu
+  :ensure t
+  :demand t
+  :bind (:map mode-specific-map
+	      ("f s" . password-menu-completing-read)))
+
 (use-package bitwarden
   :ensure (:host github :repo "seanfarley/emacs-bitwarden")
-  :after exwm-randr
+  :after (exwm-randr password-menu)
   :custom
   (bitwarden-user "patryk@gorscy.net")
   :init
@@ -500,16 +506,46 @@
   (setq bitwarden-api-client-id
         (plist-get (car (auth-source-search :host "bitwarden.id"))
                    :secret))
+
+  (defun +bitwarden-generate ()
+    (bitwarden-runcmd "generate"))
+  (defun +bitwarden-create (name username url notes)
+    (interactive "sName: \nsUsername: \nsURL: \nsNotes: ")
+    (let* ((username (if (string= username "") :null username))
+	   (url-vector (if (not (string= url ""))
+			   (vector (list (cons 'match :null)
+					 (cons 'uri url)))
+			 []))
+	   (notes (if (string= notes "") :null notes))
+	   (password (read-passwd "Password (leave empty to generate): " t (+bitwarden-generate)))
+	   (favorite (or (y-or-n-p "Favorite?") :false))
+	   (serialized (json-serialize (list
+				     (cons 'organizationId :null)
+				     (cons 'collectionIds :null)
+				     (cons 'folderId :null)
+				     (cons 'type 1)
+				     (cons 'name name)
+				     (cons 'notes notes)
+				     (cons 'favorite favorite)
+				     (cons 'fields [])
+				     (cons 'secureNote :null)
+				     (cons 'card :null)
+				     (cons 'identity :null)
+				     (cons 'reprompt 0)
+				     (cons 'login
+					   (list (cons 'username username)
+						 (cons 'password password)
+						 (cons 'uris url-vector))))))
+	   (encoded (base64-encode-string serialized)))
+      (bitwarden-runcmd "create" "item" encoded)
+      (bitwarden-sync)
+      (bitwarden-auth-source-enable)
+      (password-menu--save-field-in-kill-ring password name)))
+  
   :config
   (bitwarden-auth-source-enable)
   (bitwarden-login)
   (bitwarden-unlock))
-
-(use-package password-menu
-  :ensure t
-  :demand t
-  :bind (:map mode-specific-map
-	      ("f s" . password-menu-completing-read)))
 
 (use-package transient
   :ensure t
@@ -785,9 +821,9 @@ See `consult-omni-multi' for more details.
   (setq auto-save-file-name-transforms
 	`((".*" ,temporary-file-directory t))))
 
-(use-package forge
-  :ensure t
-  :after magit)
+;; (use-package forge
+;;   :ensure t
+;;   :after magit)
   
 (use-package pinentry
   :ensure t
