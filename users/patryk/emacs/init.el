@@ -90,11 +90,19 @@
   :config
   (exwm-randr-mode))
 
+(use-package expand-region
+  :ensure t
+  :bind (:map meow-normal-state-keymap
+	      ("e" . er/expand-region)))
+
 (use-package meow
   :ensure t
   :custom
   (meow-goto-line-function #'consult-goto-line)
+  (meow-use-cursor-position-hack t)
+  (meow-use-clipboard t)
   :init
+  (keyboard-translate ?\C-i ?\H-i)
   (defun meow-setup ()
     (setq meow-cheatsheet-layout meow-cheatsheet-layout-qwerty)
     (meow-motion-define-key
@@ -133,7 +141,7 @@
      '("-" . negative-argument)
      '(";" . meow-reverse)
      '("#" . comment-dwim)
-     '("C-e" . meow-inner-of-thing)
+     '("H-i" . meow-inner-of-thing)
      '("C-a" . meow-bounds-of-thing)
      '("[" . meow-beginning-of-thing)
      '("]" . meow-end-of-thing)
@@ -161,8 +169,6 @@
      '("L" . meow-right-expand)
      '("m" . meow-join)
      '("n" . meow-search)
-     '("e" . meow-block)
-     '("E" . meow-to-block)
      '("p" . meow-yank)
      '("q" . meow-quit)
      '("g" . meow-goto-line)
@@ -171,9 +177,10 @@
      '("d" . meow-kill)
      '("F" . meow-till)
      '("u" . meow-undo)
+     '("C-r" . undo-redo)
      '("U" . meow-undo-in-selection)
      '("/" . meow-visit)
-     '("v" . meow-mark-symbol)
+     '("v" . meow-grab)
      '("V" . meow-line)
      '("y" . meow-save)
      '("I" . (lambda () (interactive) (meow-beginning-of-thing ?l) (meow-insert-mode)))
@@ -831,3 +838,9 @@ See `consult-omni-multi' for more details.
   (epg-pinentry-mode 'loopback)
   :config
   (pinentry-start))
+
+(use-package eww
+  :ensure nil
+  :custom
+  (browse-url-browser-function #'eww)
+  (eww-readable-urls '(".*")))
