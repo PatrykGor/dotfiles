@@ -56,8 +56,6 @@
     "/nix".options = [ "compress=zstd" "noatime" ];
   };
 
-  swapDevices = [ { device = "/swap/swapfile"; } ];
-
   services.btrfs.autoScrub = {
     enable = true;
     interval = "monthly";
