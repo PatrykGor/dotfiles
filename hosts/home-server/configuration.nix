@@ -108,11 +108,11 @@
       enable = true;
     };
 
-    bazarr.enable = true;
-    lidarr.enable = true;
+    # bazarr.enable = true;
+    # lidarr.enable = true;
     prowlarr.enable = true;
     radarr.enable = true;
-    readarr.enable = true;
+    # readarr.enable = true;
     sonarr.enable = true;
     jellyseerr.enable = true;
   };
