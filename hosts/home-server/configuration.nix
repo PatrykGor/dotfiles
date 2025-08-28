@@ -106,7 +106,37 @@
       enable = true;
     };
 
-    bazarr.enable = true;
+    recyclarr = {
+      enable = true;
+      configuration = {
+        sonarr = {
+          series = {
+            base_url = "http://localhost:8989";
+            api_key = "!env_var SONARR_API_KEY";
+            quality_definition = {
+              type = "series";
+            };
+            delete_old_custom_formats = true;
+            # quality_profiles = [
+            #   {
+            #     name = "WEB-DL (2160p)";
+                
+            #   }
+            # ];
+          };
+        };
+        radarr = {
+          movies = {
+            base_url = "http://localhost:7878";
+            api_key = "!env_var RADARR_API_KEY";
+            quality_definition = {
+              type = "movie";
+            };
+            delete_old_custom_formats = true;
+          };
+        };
+      };
+    };
     # lidarr.enable = true;
     prowlarr.enable = true;
     radarr.enable = true;
