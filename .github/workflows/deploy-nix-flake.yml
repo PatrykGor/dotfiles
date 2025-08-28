@@ -18,8 +18,7 @@ on:
 
 jobs:
   deploy-nix:
-    runs-on: [self-hosted, linux, x64, nixos-runner]
-
+    runs-on: ubuntu-latest
     steps:
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
