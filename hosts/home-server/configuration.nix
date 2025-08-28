@@ -50,7 +50,7 @@
 
   services.getty.autologinUser = "patryk";
 
-  fileSystems = {
+    fileSystems = {
     "/".options = [ "compress=zstd" ];
     "/data".options = [ "compress=zstd" ];
     "/nix".options = [ "compress=zstd" "noatime" ];
@@ -93,6 +93,11 @@
 
   networking.hostName = "home-server";
   services.tailscale.enable = true;
+  
+  services.flaresolverr = {
+    enable = true;
+    port = 8191;
+  };
 
   nixarr = {
     enable = true;
