@@ -34,7 +34,7 @@ jobs:
       - name: Tailscale SSH deploy
         uses: FarisZR/tailscale-ssh-deploy@v1
         with:
-          remote_host: ${{ github.events.inputs.host }}
+          remote_host: ${{ github.event.inputs.host }}
           # The destination path on the remote host
           remote_destination: ${{ github.event.inputs.host-destination }}
           # The local directory to upload
