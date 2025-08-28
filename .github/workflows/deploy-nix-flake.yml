@@ -1,0 +1,46 @@
+name: deploy-nix-flakes
+
+on:
+  workflow_dispatch:
+    inputs:
+      output:
+        required: true
+        default: /#home-server
+        description: flake output to use e.g. .#home-server
+      host:
+        required: true
+        default: root@home-server
+        description: tailscale host in the format <user>@<name>
+      host-destination:
+        required: true
+        default: /data/nixos
+        description: directory to move the files into on the host machine
+
+jobs:
+  deploy-nix:
+    runs-on: [self-hosted, linux, x64, nixos-runner]
+
+    steps:
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          hostname: Github-actions
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+    
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      
+      - name: Tailscale SSH deploy
+        uses: FarisZR/tailscale-ssh-deploy@v1
+        with:
+          remote_host: ${{ github.events.inputs.host }}
+          # The destination path on the remote host
+          remote_destination: ${{ github.event.inputs.host-destination }}
+          # The local directory to upload
+          directory: dotfiles
+          # A command to run on the remote host after the upload is finished
+          post_upload_command: nixos-rebuild switch --flake "${{ github.event.inputs.host-destination }}${{ github.event.inputs.output }}"
+        
+
