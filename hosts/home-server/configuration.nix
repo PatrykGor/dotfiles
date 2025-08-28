@@ -54,11 +54,6 @@
     "/".options = [ "compress=zstd" ];
     "/data".options = [ "compress=zstd" ];
     "/nix".options = [ "compress=zstd" "noatime" ];
-    "/swap" = {
-      fsType = "btrfs";
-      options = [ "subvol=swap" "noatime" ];
-      device = "changeme";
-    };
   };
 
   swapDevices = [ { device = "/swap/swapfile"; } ];
