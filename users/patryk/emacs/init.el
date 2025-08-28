@@ -123,6 +123,7 @@
      '("9" . meow-digit-argument)
      '("0" . meow-digit-argument)
      '(":" . "M-x")
+     '("SPC" . (lambda () (interactive) (if (meow-motion-mode-p) (meow-normal-mode) (meow-motion-mode))))
      '("RET" . embark-act)
      '("/" . meow-keypad-describe-key)
      '("?" . meow-cheatsheet))
