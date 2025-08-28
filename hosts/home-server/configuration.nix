@@ -35,8 +35,39 @@
   };
   
   # Bootloader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  boot.loader.grub = {
+    enable = true;
+    device = "/dev/sdb";
+    useOSProber = true;
+  };
+
+  users.users.patryk = {
+    isNormalUser = true;
+    description = "Patryk Górski";
+    extraGroups = [ "wheel" ];
+    packages = [ ];
+  };
+
+  services.getty.autologinUser = "patryk";
+
+  fileSystems = {
+    "/".options = [ "compress=zstd" ];
+    "/data".options = [ "compress=zstd" ];
+    "/nix".options = [ "compress=zstd" "noatime" ];
+    "/swap" = {
+      fsType = "btrfs";
+      options = [ "subvol=swap" "noatime" ];
+      device = "changeme";
+    };
+  };
+
+  swapDevices = [ { device = "/swap/swapfile"; } ];
+
+  services.btrfs.autoScrub = {
+    enable = true;
+    interval = "monthly";
+    fileSystems = [ "/" ];
+  };
 
   # Set your time zone.
   time.timeZone = "Europe/Warsaw";
@@ -71,19 +102,10 @@
     mediaDir = "/data/media";
     stateDir = "/data/media/.state/nixarr";
 
-    vpn = {
-      enable = true;
-      # WARNING: This file must _not_ be in the config git directory
-      # You can usually get this wireguard file from your VPN provider
-      wgConf = "/data/.secret/wg.conf";
-    };
-
     jellyfin.enable = true;
 
     transmission = {
       enable = true;
-      vpn.enable = true;
-      peerPort = 50000; # Set this to the port forwarded by your VPN
     };
 
     bazarr.enable = true;
