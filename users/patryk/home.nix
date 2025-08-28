@@ -107,6 +107,7 @@
     vim
     bitwarden-cli
     nixd
+    nodejs
   ];
 
   # Enable home-manager and git
