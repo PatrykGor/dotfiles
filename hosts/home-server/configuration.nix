@@ -3,6 +3,7 @@
   lib,
   config,
   pkgs,
+  secrets,
   ...
 }: {
   imports = [
@@ -68,7 +69,10 @@
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
 
-  environment.systemPackages = with pkgs; [ git ];
+  environment.systemPackages = with pkgs; [
+    git
+    recyclarr
+  ];
 
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "pl_PL.UTF-8";
@@ -112,7 +116,7 @@
         sonarr = {
           series = {
             base_url = "http://localhost:8989";
-            api_key = "!env_var SONARR_API_KEY";
+            api_key = secrets.nixarr.sonarr-api-key;
             quality_definition = {
               type = "series";
             };
@@ -128,7 +132,7 @@
         radarr = {
           movies = {
             base_url = "http://localhost:7878";
-            api_key = "!env_var RADARR_API_KEY";
+            api_key = secrets.nixarr.radarr-api-key;
             quality_definition = {
               type = "movie";
             };

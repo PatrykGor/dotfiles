@@ -31,7 +31,8 @@
   in {
     # NixOS configuration entrypoint
     nixosConfigurations = let
-      specialArgs = {inherit inputs outputs;};
+      secrets = builtins.fromJSON (builtins.readFile "${self}/secrets/secrets.json");
+      specialArgs = {inherit inputs outputs secrets;};
     in {
       patryk-laptop = nixpkgs.lib.nixosSystem {
         inherit specialArgs;
