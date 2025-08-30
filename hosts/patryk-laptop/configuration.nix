@@ -121,7 +121,10 @@
   # Configure console keymap
   console.keyMap = "pl2";
 
-  networking.hostName = "patryk-laptop";
+  networking = {
+    hostName = "patryk-laptop";
+    firewall.checkReversePath = "loose";
+  };
   services.tailscale.enable = true;
 
   services.keyd = {
