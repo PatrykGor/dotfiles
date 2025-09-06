@@ -121,6 +121,10 @@
 
     transmission = {
       enable = true;
+      extraAllowedIps = [ "100.*.*.*" ];
+      extraSettings = {
+        rpc-host-whitelist-enabled = false;
+      };
     };
 
     recyclarr = {
