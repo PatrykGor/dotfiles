@@ -123,7 +123,7 @@
 	("9" . meow-digit-argument)
 	("0" . meow-digit-argument)
 	(":" . execute-extended-command)
-	("SPC" . (lambda () (interactive) (if (meow-motion-mode-p) (meow-normal-mode) (meow-motion-mode))))
+	;; ("SPC" . (lambda () (interactive) (if (meow-motion-mode-p) (meow-normal-mode) (meow-motion-mode))))
 	("RET" . embark-act)
 	("/" . meow-keypad-describe-key)
 	("?" . meow-cheatsheet)
@@ -854,19 +854,18 @@ See `consult-omni-multi' for more details.
   (browse-url-browser-function #'eww)
   (eww-readable-urls '(".*")))
 
-(use-package magit-gptcommit
-  :ensure (:host github :repo "douo/magit-gptcommit" :branch "gptel")
-  :after gptel magit
-  :config
+;; (use-package magit-gptcommit
+;;   :ensure (:host github :repo "douo/magit-gptcommit" :branch "gptel")
+;;   :after gptel magit
+;;   :config
 
-  ;; Enable magit-gptcommit-mode to watch staged changes and generate commit message automatically in magit status buffer
-  ;; This mode is optional, you can also use `magit-gptcommit-generate' to generate commit message manually
-  ;; `magit-gptcommit-generate' should only execute on magit status buffer currently
-  (magit-gptcommit-mode 1)
+;;   ;; Enable magit-gptcommit-mode to watch staged changes and generate commit message automatically in magit status buffer
+;;   ;; This mode is optional, you can also use `magit-gptcommit-generate' to generate commit message manually
+;;   ;; `magit-gptcommit-generate' should only execute on magit status buffer currently
+;;   (magit-gptcommit-mode 1)
 
-  ;; Add gptcommit transient commands to `magit-commit'
-  ;; Eval (transient-remove-suffix 'magit-commit '(1 -1)) to remove gptcommit transient commands
-  (magit-gptcommit-status-buffer-setup)
-  :bind (:map magit-mode-map
-              ([remap magit-commit] . magit-gptcommit-commit-create))
-  )
+;;   ;; Add gptcommit transient commands to `magit-commit'
+;;   ;; Eval (transient-remove-suffix 'magit-commit '(1 -1)) to remove gptcommit transient commands
+;;   (magit-gptcommit-status-buffer-setup)
+;;   :bind (:map magit-mode-map
+;;               ([remap magit-commit] . magit-gptcommit-commit-create)))
